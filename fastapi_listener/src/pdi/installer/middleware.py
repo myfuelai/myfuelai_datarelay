@@ -14,7 +14,7 @@ async def sap_event(request: Request):
 
 # configure these URLs as needed
 LOCAL_XML_URL = os.getenv("LOCAL_XML_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetMasterData")
-REMOTE_PUSH_URL = os.getenv("REMOTE_PUSH_URL", "https://qa-api.myfuel.ai/v1/master-data-webhook/")
+REMOTE_PUSH_URL = os.getenv("REMOTE_PUSH_URL", "https://qa-api.myfuel.ai/v1/get-master-data-webhook/")
 
 
 # LOCAL_XML_URL = os.getenv("LOCAL_XML_URL", "http://127.0.0.1:8080/data.xml")
@@ -100,7 +100,7 @@ async def _push_payload(payload):
         encoded_credentials = "00484a752f666bebdab333d53497bc0b38c02e88"
         headers = {"Content-Type": "application/json",
                    "Authorization": f"Token {encoded_credentials}"}
-        response = await _http_client.post(REMOTE_PUSH_URL, json=payload, headers=headers)
+        response = await _http_client.post(REMOTE_PUSH_URL, data=payload['raw'], headers=headers)
         print("Pushed payload to remote successfully.")
         print(f"Response status code: {response}")
         return True

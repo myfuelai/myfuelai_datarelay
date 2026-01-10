@@ -1,7 +1,30 @@
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
    <soap:Body>
       <GetMasterDataResponse xmlns="http://profdata.com.Petronet">
-         <GetMasterDataResult><![CDATA[<PDIMasterFile><Origins><DispatchAreas /><Terminals /><CompanyOwnedBulkPlants /></Origins><SuppliersAndCarriers><Vehicles /><Drivers /></SuppliersAndCarriers><Destinations><Sites /><Customers /></Destinations><TankCharts /><ProductAuthorizationZones /><Products><FuelProducts /><WarehouseProducts /><NonInventoryProducts /></Products></PDIMasterFile>]]></GetMasterDataResult>
+         <GetMasterDataResult><![CDATA[
+         <PDIMasterFile>
+            <Origins>
+               <DispatchAreas />
+               <Terminals />
+               <CompanyOwnedBulkPlants />
+            </Origins>
+            <SuppliersAndCarriers>
+               <Vehicles />
+               <Drivers />
+            </SuppliersAndCarriers>
+            <Destinations>
+               <Sites />
+               <Customers />
+            </Destinations>
+            <TankCharts />
+            <ProductAuthorizationZones />
+            <Products>
+               <FuelProducts />
+               <WarehouseProducts />
+               <NonInventoryProducts />
+            </Products>
+         </PDIMasterFile>
+         ]]></GetMasterDataResult>
       </GetMasterDataResponse>
    </soap:Body>
 </soap:Envelope>
