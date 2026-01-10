@@ -77,16 +77,17 @@ async def _fetch_local_xml():
             "SOAPAction": "http://profdata.com.Petronet/GetMasterData"
         }
         r = await _http_client.post(LOCAL_XML_URL, data=xml_payload, headers=headers)
-        print(f"Fetched local XML: {r.status_code}")
-        print(f"Response text: {r.text[:500]}...")  # Print first 500 characters for brevity
+        # print(f"Fetched local XML: {r.status_code}")
+        # print(f"Response text: {r.text[:500]}...")  # Print first 500 characters for brevity
         r.raise_for_status()
     except Exception as e:
         print(f"Error fetching local XML: {e}")
         return None
     try:
-        root = ET.fromstring(r.text)
-        payload = {root.tag: _xml_to_dict(root)}
-        print("Parsed XML to dict successfully. {payload}")
+        # root = ET.fromstring(r.text)
+        # payload = {root.tag: _xml_to_dict(root)}
+        # print(f"Parsed XML to dict successfully. {payload}")
+        payload = {"raw": r.text}
     except Exception:
         payload = {"raw": r.text}
     return payload
