@@ -13,7 +13,7 @@ async def sap_event(request: Request):
     return {"status": "received", "data": body.decode()}
 
 # configure these URLs as needed
-LOCAL_XML_URL = os.getenv("LOCAL_XML_URL", "https://jamesriver.pdi-cloud.com/CustomerPortal-TEST77/PDIEnterpriseWEb.ASMX?op=GetMasterData")
+LOCAL_XML_URL = os.getenv("LOCAL_XML_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetMasterData")
 REMOTE_PUSH_URL = os.getenv("REMOTE_PUSH_URL", "https://qa-api.myfuel.ai/v1/master-data-webhook/")
 
 
@@ -47,23 +47,29 @@ async def _fetch_local_xml():
     try:
         password = "MyFuelTest"
         partner_id = "MyFuel"
-        mode = 3
+        mode = 0
         xml_payload = f"""<?xml version="1.0" encoding="utf-8"?>
-        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-                    xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-        <soap:Header>
-            <UserCredentials xmlns="http://profdata.com.Petronet">
-            <Password>{password}</Password>
-            <PartnerID>{partner_id}</PartnerID>
+        <s:Envelope
+        xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+        <s:Header>
+            <UserCredentials
+                xmlns:h="http://profdata.com.Petronet"
+                xmlns="http://profdata.com.Petronet"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+                <Password>{password}</Password>
+                <PartnerID>{partner_id}</PartnerID>
             </UserCredentials>
-        </soap:Header>
-        <soap:Body>
-            <GetMasterData xmlns="http://profdata.com.Petronet">
-            <mode>{mode}</mode>
+        </s:Header>
+        <s:Body
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+            <GetMasterData
+                xmlns="http://profdata.com.Petronet">
+                <mode>{mode}</mode>
             </GetMasterData>
-        </soap:Body>
-        </soap:Envelope>"""
+        </s:Body>
+    </s:Envelope>"""
 
         # Headers for the request
         headers = {
@@ -72,6 +78,7 @@ async def _fetch_local_xml():
         }
         r = await _http_client.post(LOCAL_XML_URL, data=xml_payload, headers=headers)
         print(f"Fetched local XML: {r.status_code}")
+        print(f"Response text: {r.text[:500]}...")  # Print first 500 characters for brevity
         r.raise_for_status()
     except Exception as e:
         print(f"Error fetching local XML: {e}")
@@ -79,6 +86,7 @@ async def _fetch_local_xml():
     try:
         root = ET.fromstring(r.text)
         payload = {root.tag: _xml_to_dict(root)}
+        print("Parsed XML to dict successfully. {payload}")
     except Exception:
         payload = {"raw": r.text}
     return payload
@@ -88,7 +96,7 @@ async def _push_payload(payload):
     if _http_client is None:
         _http_client = httpx.AsyncClient(timeout=10.0)
     try:
-        encoded_credentials = "950b254389228e8f35142086820166e7adaba725"
+        encoded_credentials = "00484a752f666bebdab333d53497bc0b38c02e88"
         headers = {"Content-Type": "application/json",
                    "Authorization": f"Token {encoded_credentials}"}
         response = await _http_client.post(REMOTE_PUSH_URL, json=payload, headers=headers)
