@@ -32,7 +32,7 @@ Configure the service with the following values:
 
 Path:
 
-myfuelai_datarelay\fastapi_listener\src\pdi\installer\middleware.py
+myfuelai_datarelay\fastapi_listener\src\pdi\installer\app.py
 
 Startup directory:
 
