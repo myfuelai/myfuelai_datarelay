@@ -39,7 +39,7 @@ TASK_CONFIGS = [
         "name": "get_master_data",
         "fetch_url": os.getenv(
             "MASTER_FETCH_URL",
-            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx"
+            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetMasterData"
         ),
         "push_url": os.getenv(
             "MASTER_PUSH_URL",
@@ -103,14 +103,20 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
         "Content-Type": "text/xml; charset=utf-8",
         "SOAPAction": task["soap_action"]
     }
-
-    response = await client.post(
-        task["fetch_url"],
-        data=payload,
-        headers=headers
-    )
-    response.raise_for_status()
-    return response.text
+    try:
+        response = await client.post(
+            task["fetch_url"],
+            data=payload,
+            headers=headers
+        )
+        response.raise_for_status()
+        return response.text
+    except httpx.HTTPError as e:
+        print(f"HTTP error: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"HTTP error while fetching data: {e}") from e
+    except Exception as e:
+        print(f"General error: {e}")
+        raise RuntimeError(f"Failed to fetch data: {e}") from e
 
 
 # =========================
@@ -121,13 +127,19 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
         "Content-Type": "application/xml",
         "Authorization": f"Token {AUTH_TOKEN}"
     }
-
-    response = await client.post(
-        task["push_url"],
-        data=data,
-        headers=headers
-    )
-    response.raise_for_status()
+    try:
+        response = await client.post(
+            task["push_url"],
+            data=data,
+            headers=headers
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        print(f"HTTP error while pushing data: {e.response.status_code} - {e.response.text}")
+        raise RuntimeError(f"HTTP error while pushing data: {e}") from e
+    except Exception as e:
+        print(f"General error while pushing data: {e}")
+        raise RuntimeError(f"Failed to push data: {e}") from e
 
 
 # =========================
