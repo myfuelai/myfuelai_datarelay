@@ -1,3 +1,5 @@
 # Ignore installer build/dist directories anywhere in the repo
 **/installer/dist/**
 **/installer/build/**
+# Ignore .spec files in installer directories (including subdirs)
+**/installer/**/*.spec
