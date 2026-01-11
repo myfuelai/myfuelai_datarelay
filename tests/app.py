@@ -84,6 +84,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
         data=payload,
         headers=headers
     )
+    print(f"[{task['name']}] Fetch response status: {response.status_code} with length {len(response.text)}")
     response.raise_for_status()
     return response.text
 
@@ -102,6 +103,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
         data=data,
         headers=headers
     )
+    print(f"[{task['name']}] Push response status: {response.status_code}")
     response.raise_for_status()
 
 
