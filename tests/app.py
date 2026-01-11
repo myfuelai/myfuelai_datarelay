@@ -3,7 +3,32 @@ import uvicorn
 import asyncio
 import httpx
 import os
+# import sentry_sdk
+# from sentry_sdk.integrations.logging import LoggingIntegration
 
+# =========================
+# SENTRY INITIALIZATION
+# =========================
+# SENTRY_DSN = os.getenv(
+#     "SENTRY_DSN",
+#     "https://<key>@<org>.ingest.sentry.io/<project-id>"
+# )
+#
+# sentry_logging = LoggingIntegration(
+#     level=None,        # capture breadcrumbs
+#     event_level=None   # we send exceptions manually
+# )
+#
+# sentry_sdk.init(
+#     dsn=SENTRY_DSN,
+#     integrations=[],     # disable auto integrations
+#     traces_sample_rate=1.0,
+#     environment=os.getenv("ENV", "qa"),
+# )
+
+# =========================
+# FASTAPI APP
+# =========================
 app = FastAPI()
 
 # =========================
@@ -84,7 +109,6 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
         data=payload,
         headers=headers
     )
-    print(f"[{task['name']}] Fetch response status: {response.status_code} with length {len(response.text)}")
     response.raise_for_status()
     return response.text
 
@@ -103,7 +127,6 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
         data=data,
         headers=headers
     )
-    print(f"[{task['name']}] Push response status: {response.status_code}")
     response.raise_for_status()
 
 
@@ -118,7 +141,15 @@ async def poll_task(task: dict):
                 data = await fetch_data(task, client)
                 await push_data(task, data, client)
                 print(f"[{task['name']}] Success")
+
             except Exception as e:
+                # Sentry reporting commented out
+                # with sentry_sdk.push_scope() as scope:
+                #     scope.set_tag("task", task["name"])
+                #     scope.set_extra("fetch_url", task["fetch_url"])
+                #     scope.set_extra("push_url", task["push_url"])
+                #     sentry_sdk.capture_exception(e)
+
                 print(f"[{task['name']}] Error: {e}")
 
             await asyncio.sleep(task["poll_interval"])
@@ -154,7 +185,7 @@ async def shutdown():
 
 
 # =========================
-# ENTRY POINT (IMPORTANT)
+# ENTRY POINT
 # =========================
 if __name__ == "__main__":
     uvicorn.run(
