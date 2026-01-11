@@ -6,6 +6,16 @@ import os
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 
+# helper to get exception location
+def _exc_location(exc: BaseException) -> str:
+    tb = exc.__traceback__
+    if not tb:
+        return "unknown"
+    while tb.tb_next:
+        tb = tb.tb_next
+    frame = tb.tb_frame
+    return f"{frame.f_code.co_filename}:{tb.tb_lineno} in {frame.f_code.co_name}"
+
 # =========================
 # SENTRY INITIALIZATION
 # =========================
@@ -92,7 +102,6 @@ def build_soap_payload(operation: str) -> str:
     </s:Body>
 </s:Envelope>"""
 
-
 # =========================
 # FETCH DATA
 # =========================
@@ -112,12 +121,18 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
         response.raise_for_status()
         return response.text
     except httpx.HTTPError as e:
-        print(f"HTTP error: {e.response.status_code} - {e.response.text}")
-        raise RuntimeError(f"HTTP error while fetching data: {e}") from e
+        loc = _exc_location(e)
+        resp_info = ""
+        try:
+            resp_info = f"{e.response.status_code} - {e.response.text}"
+        except Exception:
+            resp_info = "no response"
+        print(f"HTTP error: {resp_info} (at {loc})")
+        raise RuntimeError(f"HTTP error while fetching data: {e} (at {loc})") from e
     except Exception as e:
-        print(f"General error: {e}")
-        raise RuntimeError(f"Failed to fetch data: {e}") from e
-
+        loc = _exc_location(e)
+        print(f"General error: {e} (at {loc})")
+        raise RuntimeError(f"Failed to fetch data: {e} (at {loc})") from e
 
 # =========================
 # PUSH DATA
@@ -135,12 +150,18 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
         )
         response.raise_for_status()
     except httpx.HTTPError as e:
-        print(f"HTTP error while pushing data: {e.response.status_code} - {e.response.text}")
-        raise RuntimeError(f"HTTP error while pushing data: {e}") from e
+        loc = _exc_location(e)
+        resp_info = ""
+        try:
+            resp_info = f"{e.response.status_code} - {e.response.text}"
+        except Exception:
+            resp_info = "no response"
+        print(f"HTTP error while pushing data: {resp_info} (at {loc})")
+        raise RuntimeError(f"HTTP error while pushing data: {e} (at {loc})") from e
     except Exception as e:
-        print(f"General error while pushing data: {e}")
-        raise RuntimeError(f"Failed to push data: {e}") from e
-
+        loc = _exc_location(e)
+        print(f"General error while pushing data: {e} (at {loc})")
+        raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
 
 # =========================
 # POLL LOOP PER TASK
@@ -155,17 +176,18 @@ async def poll_task(task: dict):
                 print(f"[{task['name']}] Success")
 
             except Exception as e:
+                loc = _exc_location(e)
                 # Sentry reporting
                 with sentry_sdk.push_scope() as scope:
                     scope.set_tag("task", task["name"])
                     scope.set_extra("fetch_url", task["fetch_url"])
                     scope.set_extra("push_url", task["push_url"])
+                    scope.set_extra("error_location", loc)
                     sentry_sdk.capture_exception(e)
 
-                print(f"[{task['name']}] Error: {e}")
+                print(f"[{task['name']}] Error: {e} (at {loc})")
 
             await asyncio.sleep(task["poll_interval"])
-
 
 # =========================
 # FASTAPI ENDPOINT (OPTIONAL)
@@ -174,7 +196,6 @@ async def poll_task(task: dict):
 async def sap_event(request: Request):
     body = await request.body()
     return {"status": "received", "length": len(body)}
-
 
 # =========================
 # APP LIFECYCLE
@@ -187,14 +208,12 @@ async def startup():
     for task in TASK_CONFIGS:
         _poll_tasks.append(asyncio.create_task(poll_task(task)))
 
-
 @app.on_event("shutdown")
 async def shutdown():
     print("Stopping pollers...")
     for task in _poll_tasks:
         task.cancel()
     await asyncio.gather(*_poll_tasks, return_exceptions=True)
-
 
 # =========================
 # ENTRY POINT
