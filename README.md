@@ -14,11 +14,13 @@ Step 1: Create Executable
 
 Run the following command to build a standalone executable:
 
-pyinstaller --onefile middleware.py
+pip install pyinstaller
+
+pyinstaller --onefile app.py
 
 After the build completes, test the executable:
 
-middleware.exe
+dist/app.exe
 
 Step 2: Install Windows Service Using NSSM
 
