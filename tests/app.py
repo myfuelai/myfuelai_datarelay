@@ -3,28 +3,28 @@ import uvicorn
 import asyncio
 import httpx
 import os
-# import sentry_sdk
-# from sentry_sdk.integrations.logging import LoggingIntegration
+import sentry_sdk
+from sentry_sdk.integrations.logging import LoggingIntegration
 
 # =========================
 # SENTRY INITIALIZATION
 # =========================
-# SENTRY_DSN = os.getenv(
-#     "SENTRY_DSN",
-#     "https://<key>@<org>.ingest.sentry.io/<project-id>"
-# )
-#
-# sentry_logging = LoggingIntegration(
-#     level=None,        # capture breadcrumbs
-#     event_level=None   # we send exceptions manually
-# )
-#
-# sentry_sdk.init(
-#     dsn=SENTRY_DSN,
-#     integrations=[],     # disable auto integrations
-#     traces_sample_rate=1.0,
-#     environment=os.getenv("ENV", "qa"),
-# )
+SENTRY_DSN = os.getenv(
+    "SENTRY_DSN",
+    "https://02cad50b70c3d463fa168f4523f08808@o4507651658153984.ingest.us.sentry.io/4510690543206400"
+)
+
+sentry_logging = LoggingIntegration(
+    level=None,        # capture breadcrumbs
+    event_level=None   # we send exceptions manually
+)
+
+sentry_sdk.init(
+    dsn=SENTRY_DSN,
+    integrations=[],     # disable auto integrations
+    traces_sample_rate=1.0,
+    environment=os.getenv("ENV", "qa"),
+)
 
 # =========================
 # FASTAPI APP
@@ -143,12 +143,12 @@ async def poll_task(task: dict):
                 print(f"[{task['name']}] Success")
 
             except Exception as e:
-                # Sentry reporting commented out
-                # with sentry_sdk.push_scope() as scope:
-                #     scope.set_tag("task", task["name"])
-                #     scope.set_extra("fetch_url", task["fetch_url"])
-                #     scope.set_extra("push_url", task["push_url"])
-                #     sentry_sdk.capture_exception(e)
+                # Sentry reporting
+                with sentry_sdk.push_scope() as scope:
+                    scope.set_tag("task", task["name"])
+                    scope.set_extra("fetch_url", task["fetch_url"])
+                    scope.set_extra("push_url", task["push_url"])
+                    sentry_sdk.capture_exception(e)
 
                 print(f"[{task['name']}] Error: {e}")
 
