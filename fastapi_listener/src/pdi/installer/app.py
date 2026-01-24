@@ -8,7 +8,7 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 
 # helper to get exception location
 def _exc_location(exc: BaseException) -> str:
-    line_no = "Error line no {e.__traceback__.tb_lineno}"
+    line_no = f"Error line no {e.__traceback__.tb_lineno}"
     return line_no
     
 
