@@ -88,7 +88,7 @@ TASK_CONFIGS = [
             "http://127.0.0.1:8000/v1/get-fuel-loads-webhook/"
         ),
         "soap_action": "http://profdata.com.Petronet/GetFuelLoads",
-        "operation": "GetFuelOrders",
+        "operation": "GetFuelLoads",
         "poll_interval": 120,
         "kwargs":{
         }
@@ -202,19 +202,9 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
         )
         response.raise_for_status()
         return response.text
-    except httpx.HTTPError as e:
-        loc = _exc_location(e)
-        resp_info = ""
-        try:
-            resp_info = f"{e.response.status_code} - {e.response.text}"
-        except Exception:
-            resp_info = "no response"
-        print(f"HTTP error: {resp_info} (at {loc})")
-        raise RuntimeError(f"HTTP error while fetching data: {e} (at {loc})") from e
     except Exception as e:
         loc = _exc_location(e)
         print(f"General error: {e} (at {loc})")
-        raise RuntimeError(f"Failed to fetch data: {e} (at {loc})") from e
 
 # =========================
 # PUSH DATA
@@ -231,15 +221,6 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
             headers=headers
         )
         response.raise_for_status()
-    except httpx.HTTPError as e:
-        loc = _exc_location(e)
-        resp_info = ""
-        try:
-            resp_info = f"{e.response.status_code} - {e.response.text}"
-        except Exception:
-            resp_info = "no response"
-        print(f"HTTP error while pushing data: {resp_info} (at {loc})")
-        raise RuntimeError(f"HTTP error while pushing data: {e} (at {loc})") from e
     except Exception as e:
         loc = _exc_location(e)
         print(f"General error while pushing data: {e} (at {loc})")
