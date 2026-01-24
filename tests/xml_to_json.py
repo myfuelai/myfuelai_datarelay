@@ -1,4 +1,5 @@
 import os
+import json
 
 import xml.etree.ElementTree as ET
 
@@ -71,3 +72,7 @@ inner_root = ET.fromstring(cdata_xml)
 result_dict = {inner_root.tag: xml_to_dict(inner_root)}
 
 print(result_dict)
+
+out_path = os.path.join(os.path.dirname(__file__), "json_data.json")
+with open(out_path, "w", encoding="utf-8") as f:
+    json.dump(result_dict, f, ensure_ascii=False, indent=2)

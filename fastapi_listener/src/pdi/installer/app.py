@@ -8,13 +8,9 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 
 # helper to get exception location
 def _exc_location(exc: BaseException) -> str:
-    tb = exc.__traceback__
-    if not tb:
-        return "unknown"
-    while tb.tb_next:
-        tb = tb.tb_next
-    frame = tb.tb_frame
-    return f"{frame.f_code.co_filename}:{tb.tb_lineno} in {frame.f_code.co_name}"
+    line_no = "Error line no {e.__traceback__.tb_lineno}"
+    return line_no
+    
 
 # =========================
 # SENTRY INITIALIZATION
@@ -53,61 +49,147 @@ TASK_CONFIGS = [
         ),
         "push_url": os.getenv(
             "MASTER_PUSH_URL",
-            "https://qa-api.myfuel.ai/v1/get-master-data-webhook/"
+            # "https://qa-api.myfuel.ai/v1/get-master-data-webhook/"
+            "http://127.0.0.1:8000/v1/get-master-data-webhook/"
         ),
         "soap_action": "http://profdata.com.Petronet/GetMasterData",
         "operation": "GetMasterData",
-        "poll_interval": 60,
+        "poll_interval": 300,
+        "kwargs":{
+            "mode":"0"
+        }
     },
-    # {
-    #     "name": "get_fuel_orders",
-    #     "fetch_url": os.getenv(
-    #         "FUEL_FETCH_URL",
-    #         "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx"
-    #     ),
-    #     "push_url": os.getenv(
-    #         "FUEL_PUSH_URL",
-    #         "https://qa-api.myfuel.ai/v1/get-fuel-orders-webhook/"
-    #     ),
-    #     "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
-    #     "operation": "GetFuelOrders",
-    #     "poll_interval": 120,
-    # }
+    {
+        "name": "get_fuel_orders",
+        "fetch_url": os.getenv(
+            "FUEL_FETCH_URL",
+            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelOrders"
+        ),
+        "push_url": os.getenv(
+            "FUEL_PUSH_URL",
+            "http://127.0.0.1:8000/v1/get-fuel-orders-webhook/"
+        ),
+        "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
+        "operation": "GetFuelOrders",
+        "poll_interval": 120,
+        "kwargs":{
+            "StatusToInclude":"8",
+            "RecordsToInclude":"1"
+        }
+    },
+    {
+        "name": "get_fuel_loads",
+        "fetch_url": os.getenv(
+            "FUEL_FETCH_URL",
+            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelLoads"
+        ),
+        "push_url": os.getenv(
+            "FUEL_PUSH_URL",
+            "http://127.0.0.1:8000/v1/get-fuel-loads-webhook/"
+        ),
+        "soap_action": "http://profdata.com.Petronet/GetFuelLoads",
+        "operation": "GetFuelOrders",
+        "poll_interval": 120,
+        "kwargs":{
+        }
+    }
 ]
 
 AUTH_TOKEN = os.getenv(
     "REMOTE_AUTH_TOKEN",
-    "00484a752f666bebdab333d53497bc0b38c02e88"
+    "00484a752f666bebdab333d53497bc0b38c02e88",
+    # '1ddc3814bb51978ef905c14a6b5aed80504074de'
 )
 
 # =========================
 # SOAP PAYLOAD BUILDER
 # =========================
-def build_soap_payload(operation: str) -> str:
+
+def build_soap_payload(operation: str, **kwargs) -> str:
     password = "MyFuelTest"
     partner_id = "MyFuel"
+    
+    get_master_data_body = f"""
+    <?xml version="1.0" encoding="utf-8"?>
+    <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+        <s:Header>
+            <UserCredentials xmlns="http://profdata.com.Petronet">
+                <Password>{password}</Password>
+                <PartnerID>{partner_id}</PartnerID>
+            </UserCredentials>
+        </s:Header>
+        <s:Body>
+            <{operation} xmlns="http://profdata.com.Petronet">
+                <mode>{kwargs.get('mode')}</mode>
+            </{operation}>
+        </s:Body>
+    </s:Envelope>
+    """
 
-    return f"""<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-    <s:Header>
-        <UserCredentials xmlns="http://profdata.com.Petronet">
+
+    get_fuel_orders_body = f"""
+    <s:Envelope
+        xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+        <s:Header>
+            <UserCredentials
+                xmlns:h="http://profdata.com.Petronet"
+                xmlns="http://profdata.com.Petronet"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+                <Password>{password}</Password>
+                <PartnerID>{partner_id}</PartnerID>
+            </UserCredentials>
+        </s:Header>
+        <s:Body
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+            <{operation}
+                xmlns="http://profdata.com.Petronet">
+                <PDIGetFuelOrdersFilter>
+                    <PDIGetFuelOrdersInput
+                        xmlns="">
+                        <StatusToInclude>
+                            <Status>{kwargs.get('StatusToInclude')}</Status>
+                        </StatusToInclude>
+                        <RecordsToInclude>{kwargs.get('RecordsToInclude')}</RecordsToInclude>
+                    </PDIGetFuelOrdersInput>
+                </PDIGetFuelOrdersFilter>
+            </{operation}>
+        </s:Body>
+    </s:Envelope>
+    """
+
+    get_fuel_loads_body = f"""
+    <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:prof="http://profdata.com.Petronet">
+    <soapenv:Header>
+        <prof:UserCredentials>
             <Password>{password}</Password>
             <PartnerID>{partner_id}</PartnerID>
-        </UserCredentials>
-    </s:Header>
-    <s:Body>
-        <{operation} xmlns="http://profdata.com.Petronet">
-            <mode>0</mode>
-        </{operation}>
-    </s:Body>
-</s:Envelope>"""
+        </prof:UserCredentials>
+    </soapenv:Header>
+    <soapenv:Body>
+        <prof:{operation}>
+            <prof:PDIGetFuelLoadsFilter>
+                gero
+            </prof:PDIGetFuelLoadsFilter>
+        </prof:{operation}>
+    </soapenv:Body>
+    </soapenv:Envelope>
+    """
+    if operation == 'GetFuelOrders':
+        return get_fuel_orders_body
+    elif operation == 'GetMasterData':
+        return get_master_data_body
+    elif operation == 'GetFuelLoads':
+        return get_fuel_loads_body
+    
 
 # =========================
 # FETCH DATA
 # =========================
 async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
-    payload = build_soap_payload(task["operation"])
-
+    payload = build_soap_payload(task["operation"], **task['kwargs'])
+    print("payload",payload)
     headers = {
         "Content-Type": "text/xml; charset=utf-8",
         "SOAPAction": task["soap_action"]
