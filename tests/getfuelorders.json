@@ -1,0 +1,43 @@
+{
+  "soap:Envelope": {
+    "@xmlns:soap": "http://schemas.xmlsoap.org/soap/envelope/",
+    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    "@xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+    "soap:Body": {
+      "GetFuelOrdersResponse": {
+        "@xmlns": "http://profdata.com.Petronet",
+        "GetFuelOrdersResult": {
+          "PDIFuelOrders": {
+            "PDIFuelOrder": {
+              "OrderNo": "1",
+              "OrderKey": "1",
+              "OrderStatus": "8",
+              "DestinationType": "0",
+              "SiteID": "1002",
+              "DeliveryDateTime": "2024-08-09T00:00:00",
+              "Promised": "0",
+              "BusinessDate": "2024-08-09",
+              "CODPayment": "0",
+              "CODAmountToCollect": "0.00",
+              "PaymentReceived": "0",
+              "ContactEmailAddress": null,
+              "ContactPrimaryPhone": null,
+              "ContactName": null,
+              "ShipToOverride": "0",
+              "ShipToDescription": "JRP-Warbro",
+              "ShipToAddress1": "12301 Deerhill Rd",
+              "ShipToCity": "Midlothian",
+              "ShipToState": "VA",
+              "ShipToPostalCode": "23112-0000",
+              "OrderTotalAmount": "0.00",
+              "IsUrgent": "0",
+              "PriceDateBasis": "0",
+              "FreightDateBasis": "0",
+              "Budget": "0"
+            }
+          }
+        }
+      }
+    }
+  }
+}

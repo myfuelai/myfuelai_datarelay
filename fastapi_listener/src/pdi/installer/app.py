@@ -73,8 +73,8 @@ TASK_CONFIGS = [
         "operation": "GetFuelOrders",
         "poll_interval": 120,
         "kwargs":{
-            "StatusToInclude":"8",
-            "RecordsToInclude":"1"
+            "StatusToInclude":["4","10"],
+            "RecordsToInclude":"10"
         }
     },
     {
@@ -127,36 +127,48 @@ def build_soap_payload(operation: str, **kwargs) -> str:
     """
 
 
+    statuses = kwargs.get("StatusToInclude", [])
+    if isinstance(statuses, (list, tuple)):
+        statuses_list = [str(s) for s in statuses]
+    else:
+        statuses_list = [s.strip() for s in str(statuses).split(",")] if statuses else []
+
+    statuses_xml = "\n                                ".join(
+        f"<Status>{s}</Status>" for s in statuses_list
+    ) if statuses_list else ""
+
+    records = kwargs.get("RecordsToInclude", "")
+
     get_fuel_orders_body = f"""
-    <s:Envelope
-        xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-        <s:Header>
-            <UserCredentials
-                xmlns:h="http://profdata.com.Petronet"
-                xmlns="http://profdata.com.Petronet"
+            <s:Envelope
+            xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+            <s:Header>
+                <UserCredentials
+                    xmlns:h="http://profdata.com.Petronet"
+                    xmlns="http://profdata.com.Petronet"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+                    <Password>{password}</Password>
+                    <PartnerID>{partner_id}</PartnerID>
+                </UserCredentials>
+            </s:Header>
+            <s:Body
                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                 xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-                <Password>{password}</Password>
-                <PartnerID>{partner_id}</PartnerID>
-            </UserCredentials>
-        </s:Header>
-        <s:Body
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-            <{operation}
-                xmlns="http://profdata.com.Petronet">
-                <PDIGetFuelOrdersFilter>
-                    <PDIGetFuelOrdersInput
-                        xmlns="">
-                        <StatusToInclude>
-                            <Status>{kwargs.get('StatusToInclude')}</Status>
-                        </StatusToInclude>
-                        <RecordsToInclude>{kwargs.get('RecordsToInclude')}</RecordsToInclude>
-                    </PDIGetFuelOrdersInput>
-                </PDIGetFuelOrdersFilter>
-            </{operation}>
-        </s:Body>
-    </s:Envelope>
+                <{operation}
+                    xmlns="http://profdata.com.Petronet">
+                    <PDIGetFuelOrdersFilter>
+                        <PDIGetFuelOrdersInput
+                            xmlns="">
+                            <StatusToInclude>
+                                {statuses_xml}
+                            </StatusToInclude>
+                            <RecordsToInclude>{records}</RecordsToInclude>
+                        </PDIGetFuelOrdersInput>
+                    </PDIGetFuelOrdersFilter>
+                </{operation}>
+            </s:Body>
+        </s:Envelope>
     """
 
     get_fuel_loads_body = f"""
