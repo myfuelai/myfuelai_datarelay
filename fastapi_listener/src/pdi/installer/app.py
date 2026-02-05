@@ -234,18 +234,22 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             "SOAPAction": task["soap_action"]
         }
         try:
+            # allow more time for slow SOAP endpoints and surface bad HTTP statuses
             response = await client.post(
                 task["fetch_url"],
                 data=payload,
-                headers=headers
+                headers=headers,
+                timeout=60.0
             )
-            # response.raise_for_status()
+            response.raise_for_status()
+            print(f"Response status: {response.status_code}")
             print(f"Response received: {response.text[:200]}...")  # Log first 200 chars
             return response.text
         
         except Exception as e:
             loc = _exc_location(e)
             print(f"General error: {e} (at {loc})")
+            raise RuntimeError(f"Failed to fetch data from PDI: {e} (at {loc})") from e
     
     elif task["pull"] == "myfuel":
         payload = build_myfuel_payload(task["operation"], **task['kwargs'])
