@@ -41,64 +41,64 @@ app = FastAPI()
 # TASK CONFIGURATION
 # =========================
 TASK_CONFIGS = [
-    {
-        "name": "get_master_data",
-        "fetch_url": os.getenv(
-            "MASTER_FETCH_URL",
-            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetMasterData"
-        ),
-        "push_url": os.getenv(
-            "MASTER_PUSH_URL",
-            # "https://qa-api.myfuel.ai/v1/get-master-data-webhook/"
-            "http://127.0.0.1:8000/v1/get-master-data-webhook/"
-        ),
-        "soap_action": "http://profdata.com.Petronet/GetMasterData",
-        "operation": "GetMasterData",
-        "poll_interval": 300,
-        "kwargs":{
-            "mode":"0"
-        },
-        "push":"myfuel",
-        "pull":"pdi"
-    },
-    {
-        "name": "get_fuel_orders",
-        "fetch_url": os.getenv(
-            "FUEL_FETCH_URL",
-            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelOrders"
-        ),
-        "push_url": os.getenv(
-            "FUEL_PUSH_URL",
-            "http://127.0.0.1:8000/v1/get-fuel-orders-webhook/"
-        ),
-        "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
-        "operation": "GetFuelOrders",
-        "poll_interval": 120,
-        "kwargs":{
-            "StatusToInclude":["4","10"],
-            "RecordsToInclude":"10"
-        },
-        "push":"myfuel",
-        "pull":"pdi"
-    },
-    {
-        "name": "get_fuel_loads",
-        "fetch_url": os.getenv(
-            "FUEL_FETCH_URL",
-            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelLoads"
-        ),
-        "push_url": os.getenv(
-            "FUEL_PUSH_URL",
-            "http://127.0.0.1:8000/v1/get-fuel-loads-webhook/"
-        ),
-        "soap_action": "http://profdata.com.Petronet/GetFuelLoads",
-        "operation": "GetFuelLoads",
-        "poll_interval": 120,
-        "kwargs":{
-        },
-        "push":"myfuel",
-        "pull":"pdi"
-    },
+    # {
+    #     "name": "get_master_data",
+    #     "fetch_url": os.getenv(
+    #         "MASTER_FETCH_URL",
+    #         "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetMasterData"
+    #     ),
+    #     "push_url": os.getenv(
+    #         "MASTER_PUSH_URL",
+    #         # "https://qa-api.myfuel.ai/v1/get-master-data-webhook/"
+    #         "http://127.0.0.1:8000/v1/get-master-data-webhook/"
+    #     ),
+    #     "soap_action": "http://profdata.com.Petronet/GetMasterData",
+    #     "operation": "GetMasterData",
+    #     "poll_interval": 300,
+    #     "kwargs":{
+    #         "mode":"0"
+    #     },
+    #     "push":"myfuel",
+    #     "pull":"pdi"
+    # },
+    # {
+    #     "name": "get_fuel_orders",
+    #     "fetch_url": os.getenv(
+    #         "FUEL_FETCH_URL",
+    #         "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelOrders"
+    #     ),
+    #     "push_url": os.getenv(
+    #         "FUEL_PUSH_URL",
+    #         "http://127.0.0.1:8000/v1/get-fuel-orders-webhook/"
+    #     ),
+    #     "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
+    #     "operation": "GetFuelOrders",
+    #     "poll_interval": 120,
+    #     "kwargs":{
+    #         "StatusToInclude":["4","10"],
+    #         "RecordsToInclude":"10"
+    #     },
+    #     "push":"myfuel",
+    #     "pull":"pdi"
+    # },
+    # {
+    #     "name": "get_fuel_loads",
+    #     "fetch_url": os.getenv(
+    #         "FUEL_FETCH_URL",
+    #         "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelLoads"
+    #     ),
+    #     "push_url": os.getenv(
+    #         "FUEL_PUSH_URL",
+    #         "http://127.0.0.1:8000/v1/get-fuel-loads-webhook/"
+    #     ),
+    #     "soap_action": "http://profdata.com.Petronet/GetFuelLoads",
+    #     "operation": "GetFuelLoads",
+    #     "poll_interval": 120,
+    #     "kwargs":{
+    #     },
+    #     "push":"myfuel",
+    #     "pull":"pdi"
+    # },
     {
         "name": "pull_myfuel_orders",
         "fetch_url": os.getenv(
@@ -238,7 +238,9 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
                 headers=headers
             )
             response.raise_for_status()
+            print(f"Response received: {response.text[:200]}...")  # Log first 200 chars
             return response.text
+        
         except Exception as e:
             loc = _exc_location(e)
             print(f"General error: {e} (at {loc})")
@@ -251,6 +253,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             }
             response = await client.post(task["fetch_url"], data=payload, headers=headers)
             response.raise_for_status()
+            print(f"Response received: {response.text[:200]}...")
             return response.text
         except Exception as e:
             loc = _exc_location(e)
@@ -263,21 +266,43 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
 async def push_data(task: dict, data: str, client: httpx.AsyncClient):
     
     if task["push"] == "pdi":
-        try:
+        if task["operation"] == "AddFuelOrder":
             headers = {
-                "Content-Type": "application/xml",
-                "Authorization": f"Token {AUTH_TOKEN}"
+                "Content-Type": "text/xml; charset=utf-8",
+                "SOAPAction": 'http://profdata.com.Petronet/AddFuelOrder'
             }
-            response = await client.post(
-                task["push_url"],
-                data=data,
-                headers=headers
-            )
-            response.raise_for_status()
-        except Exception as e:
-            loc = _exc_location(e)
-            print(f"General error while pushing data: {e} (at {loc})")
-            raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
+            json_data = httpx.Response(200, content=data).json()
+            for item in json_data.get('orders', []):
+                print(f"Pushing item: {item}")
+                order_xml = item.get('order_xml', '')
+                try:
+                    response = await client.post(
+                        url="http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder",
+                        data=order_xml,
+                        headers=headers
+                    )
+                    response.raise_for_status() 
+                    print(f"Push response: {response.text}")  # Log first 200 chars
+                except Exception as e:
+                    loc = _exc_location(e)
+                    print(f"General error while pushing data to PDI: {e} (at {loc})")
+                    raise RuntimeError(f"Failed to push data to PDI: {e} (at {loc})") from e
+        else:
+            try:
+                headers = {
+                    "Content-Type": "application/xml",
+                    "Authorization": f"Token {AUTH_TOKEN}"
+                }
+                response = await client.post(
+                    task["push_url"],
+                    data=data,
+                    headers=headers
+                )
+                response.raise_for_status()
+            except Exception as e:
+                loc = _exc_location(e)
+                print(f"General error while pushing data: {e} (at {loc})")
+                raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
     
     elif task["push"] == "myfuel":
         try:
