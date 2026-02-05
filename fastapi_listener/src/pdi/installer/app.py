@@ -5,10 +5,10 @@ import httpx
 import os
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
-
+from datetime import datetime
 # helper to get exception location
 def _exc_location(exc: BaseException) -> str:
-    line_no = f"Error line no {e.__traceback__.tb_lineno}"
+    line_no = f"Error line no {exc.__traceback__.tb_lineno}"
     return line_no
     
 
@@ -57,7 +57,9 @@ TASK_CONFIGS = [
         "poll_interval": 300,
         "kwargs":{
             "mode":"0"
-        }
+        },
+        "push":"myfuel",
+        "pull":"pdi"
     },
     {
         "name": "get_fuel_orders",
@@ -75,7 +77,9 @@ TASK_CONFIGS = [
         "kwargs":{
             "StatusToInclude":["4","10"],
             "RecordsToInclude":"10"
-        }
+        },
+        "push":"myfuel",
+        "pull":"pdi"
     },
     {
         "name": "get_fuel_loads",
@@ -91,7 +95,25 @@ TASK_CONFIGS = [
         "operation": "GetFuelLoads",
         "poll_interval": 120,
         "kwargs":{
-        }
+        },
+        "push":"myfuel",
+        "pull":"pdi"
+    },
+    {
+        "name": "pull_myfuel_orders",
+        "fetch_url": os.getenv(
+            "MYFUEL_FETCH_URL",
+            "http://127.0.0.1:8000/v1/pdi/pull-myfuel-orders/"
+        ),
+        "push_url": os.getenv("PDI_OORDER_PUSH_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder"),
+        "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
+        "operation": "AddFuelOrder",
+        "poll_interval": 120,
+        "kwargs":{
+            "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
+        },
+        "push":"pdi",
+        "pull":"myfuel"
     }
 ]
 
@@ -195,49 +217,86 @@ def build_soap_payload(operation: str, **kwargs) -> str:
     elif operation == 'GetFuelLoads':
         return get_fuel_loads_body
     
-
+def build_myfuel_payload(operation: str, **kwargs) -> str:
+    if operation == "AddFuelOrder":
+        data = kwargs.get("data", "")
+        return data
 # =========================
 # FETCH DATA
 # =========================
 async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
-    payload = build_soap_payload(task["operation"], **task['kwargs'])
-    print("payload",payload)
-    headers = {
-        "Content-Type": "text/xml; charset=utf-8",
-        "SOAPAction": task["soap_action"]
-    }
-    try:
-        response = await client.post(
-            task["fetch_url"],
-            data=payload,
-            headers=headers
-        )
-        response.raise_for_status()
-        return response.text
-    except Exception as e:
-        loc = _exc_location(e)
-        print(f"General error: {e} (at {loc})")
+    if task["pull"] == "pdi":
+        payload = build_soap_payload(task["operation"], **task['kwargs'])
+        headers = {
+            "Content-Type": "text/xml; charset=utf-8",
+            "SOAPAction": task["soap_action"]
+        }
+        try:
+            response = await client.post(
+                task["fetch_url"],
+                data=payload,
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.text
+        except Exception as e:
+            loc = _exc_location(e)
+            print(f"General error: {e} (at {loc})")
+    
+    elif task["pull"] == "myfuel":
+        payload = build_myfuel_payload(task["operation"], **task['kwargs'])
+        try:
+            headers = {
+                "Authorization": f"Token {AUTH_TOKEN}"
+            }
+            response = await client.post(task["fetch_url"], data=payload, headers=headers)
+            response.raise_for_status()
+            return response.text
+        except Exception as e:
+            loc = _exc_location(e)
+            print(f"General error while fetching data: {e} (at {loc})")
+            raise RuntimeError(f"Failed to fetch data: {e} (at {loc})") from e
 
 # =========================
 # PUSH DATA
 # =========================
 async def push_data(task: dict, data: str, client: httpx.AsyncClient):
-    headers = {
-        "Content-Type": "application/xml",
-        "Authorization": f"Token {AUTH_TOKEN}"
-    }
-    try:
-        response = await client.post(
-            task["push_url"],
-            data=data,
-            headers=headers
-        )
-        response.raise_for_status()
-    except Exception as e:
-        loc = _exc_location(e)
-        print(f"General error while pushing data: {e} (at {loc})")
-        raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
-
+    
+    if task["push"] == "pdi":
+        try:
+            headers = {
+                "Content-Type": "application/xml",
+                "Authorization": f"Token {AUTH_TOKEN}"
+            }
+            response = await client.post(
+                task["push_url"],
+                data=data,
+                headers=headers
+            )
+            response.raise_for_status()
+        except Exception as e:
+            loc = _exc_location(e)
+            print(f"General error while pushing data: {e} (at {loc})")
+            raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
+    
+    elif task["push"] == "myfuel":
+        try:
+            headers = {
+                "Content-Type": "application/xml",
+                "Authorization": f"Token {AUTH_TOKEN}"
+            }
+            response = await client.post(
+                task["push_url"],
+                data=data,
+                headers=headers
+            )
+            response.raise_for_status()
+        except Exception as e:
+            loc = _exc_location(e)
+            print(f"General error while pushing data to MyFuel: {e} (at {loc})")
+            raise RuntimeError(f"Failed to push data to MyFuel: {e} (at {loc})") from e
+        
+        
 # =========================
 # POLL LOOP PER TASK
 # =========================
