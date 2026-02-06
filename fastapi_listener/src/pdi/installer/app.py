@@ -13,6 +13,7 @@ def _exc_location(exc: BaseException) -> str:
 
 def sentry_exception_handler(exc: BaseException, task_name: str, fetch_url: str, push_url: str):
     loc = _exc_location(exc)
+    print(f"Exception occurred: {exc} (at {loc})")
     with sentry_sdk.push_scope() as scope:
         scope.set_tag("task", task_name)
         scope.set_extra("fetch_url", fetch_url)
@@ -21,6 +22,7 @@ def sentry_exception_handler(exc: BaseException, task_name: str, fetch_url: str,
         sentry_sdk.capture_exception(exc)
 
 def sentry_message(msg: str, task_name: str, fetch_url: str, push_url: str):
+    print(f"Message: {msg} (Task: {task_name})")
     with sentry_sdk.push_scope() as scope:
         scope.set_tag("task", task_name)
         scope.set_extra("fetch_url", fetch_url)
