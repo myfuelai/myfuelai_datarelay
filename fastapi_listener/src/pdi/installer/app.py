@@ -61,26 +61,26 @@ TASK_CONFIGS = [
         "push":"myfuel",
         "pull":"pdi"
     },
-    # {
-    #     "name": "get_fuel_orders",
-    #     "fetch_url": os.getenv(
-    #         "FUEL_FETCH_URL",
-    #         "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelOrders"
-    #     ),
-    #     "push_url": os.getenv(
-    #         "FUEL_PUSH_URL",
-    #         "http://127.0.0.1:8000/v1/get-fuel-orders-webhook/"
-    #     ),
-    #     "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
-    #     "operation": "GetFuelOrders",
-    #     "poll_interval": 120,
-    #     "kwargs":{
-    #         "StatusToInclude":["4","10"],
-    #         "RecordsToInclude":"10"
-    #     },
-    #     "push":"myfuel",
-    #     "pull":"pdi"
-    # },
+    {
+        "name": "get_fuel_orders",
+        "fetch_url": os.getenv(
+            "FUEL_FETCH_URL",
+            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelOrders"
+        ),
+        "push_url": os.getenv(
+            "FUEL_PUSH_URL",
+            "http://127.0.0.1:8000/v1/get-fuel-orders-webhook/"
+        ),
+        "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
+        "operation": "GetFuelOrders",
+        "poll_interval": 120,
+        "kwargs":{
+            "StatusToInclude":["4","10"],
+            "RecordsToInclude":"10"
+        },
+        "push":"myfuel",
+        "pull":"pdi"
+    },
     # {
     #     "name": "get_fuel_loads",
     #     "fetch_url": os.getenv(
@@ -99,22 +99,22 @@ TASK_CONFIGS = [
     #     "push":"myfuel",
     #     "pull":"pdi"
     # },
-    # {
-    #     "name": "pull_myfuel_orders",
-    #     "fetch_url": os.getenv(
-    #         "MYFUEL_FETCH_URL",
-    #         "http://127.0.0.1:8000/v1/pdi/pull-myfuel-orders/"
-    #     ),
-    #     "push_url": os.getenv("PDI_OORDER_PUSH_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder"),
-    #     "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
-    #     "operation": "AddFuelOrder",
-    #     "poll_interval": 120,
-    #     "kwargs":{
-    #         "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
-    #     },
-    #     "push":"pdi",
-    #     "pull":"myfuel"
-    # }
+    {
+        "name": "pull_myfuel_orders",
+        "fetch_url": os.getenv(
+            "MYFUEL_FETCH_URL",
+            "http://127.0.0.1:8000/v1/pdi/pull-myfuel-orders/"
+        ),
+        "push_url": os.getenv("PDI_OORDER_PUSH_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder"),
+        "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
+        "operation": "AddFuelOrder",
+        "poll_interval": 120,
+        "kwargs":{
+            "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
+        },
+        "push":"pdi",
+        "pull":"myfuel"
+    }
 ]
 
 AUTH_TOKEN = os.getenv(
@@ -132,18 +132,25 @@ def build_soap_payload(operation: str, **kwargs) -> str:
     partner_id = "MyFuel"
     
     get_master_data_body = f"""
-    <?xml version="1.0" encoding="utf-8"?>
-    <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+        <s:Envelope
+        xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
         <s:Header>
-            <UserCredentials xmlns="http://profdata.com.Petronet">
-                <Password>{password}</Password>
-                <PartnerID>{partner_id}</PartnerID>
+            <UserCredentials
+                xmlns:h="http://profdata.com.Petronet"
+                xmlns="http://profdata.com.Petronet"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+                <Password>MyFuelTest</Password>
+                <PartnerID>MyFuel</PartnerID>
             </UserCredentials>
         </s:Header>
-        <s:Body>
-            <{operation} xmlns="http://profdata.com.Petronet">
-                <mode>{kwargs.get('mode')}</mode>
-            </{operation}>
+        <s:Body
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+            <GetMasterData
+                xmlns="http://profdata.com.Petronet">
+                <mode>0</mode>
+            </GetMasterData>
         </s:Body>
     </s:Envelope>
     """
@@ -226,9 +233,7 @@ def build_myfuel_payload(operation: str, **kwargs) -> str:
 # =========================
 async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
     if task["pull"] == "pdi":
-        print("Building SOAP payload...")
         payload = build_soap_payload(task["operation"], **task['kwargs'])
-        print(f"Payload built: {payload}")
         headers = {
             "Content-Type": "text/xml; charset=utf-8",
             "SOAPAction": task["soap_action"]
@@ -242,8 +247,6 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
                 timeout=60.0
             )
             response.raise_for_status()
-            print(f"Response status: {response.status_code}")
-            print(f"Response received: {response.text[:200]}...")  # Log first 200 chars
             return response.text
         
         except Exception as e:
@@ -259,7 +262,6 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             }
             response = await client.post(task["fetch_url"], data=payload, headers=headers)
             response.raise_for_status()
-            print(f"Response received: {response.text[:200]}...")
             return response.text
         except Exception as e:
             loc = _exc_location(e)
@@ -279,7 +281,6 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
             }
             json_data = httpx.Response(200, content=data).json()
             for item in json_data.get('orders', []):
-                print(f"Pushing item: {item}")
                 order_xml = item.get('order_xml', '')
                 try:
                     response = await client.post(
@@ -288,7 +289,6 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                         headers=headers
                     )
                     response.raise_for_status() 
-                    print(f"Push response: {response.text}")  # Log first 200 chars
                 except Exception as e:
                     loc = _exc_location(e)
                     print(f"General error while pushing data to PDI: {e} (at {loc})")
@@ -319,7 +319,8 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
             response = await client.post(
                 task["push_url"],
                 data=data,
-                headers=headers
+                headers=headers,
+                timeout=120.0  # Allow more time for MyFuel to process
             )
             response.raise_for_status()
         except Exception as e:
@@ -335,10 +336,8 @@ async def poll_task(task: dict):
     async with httpx.AsyncClient(timeout=20.0) as client:
         while True:
             try:
-                print(f"[{task['name']}] Fetching...")
                 data = await fetch_data(task, client)
                 await push_data(task, data, client)
-                print(f"[{task['name']}] Success")
 
             except Exception as e:
                 loc = _exc_location(e)
@@ -369,13 +368,11 @@ _poll_tasks: list[asyncio.Task] = []
 
 @app.on_event("startup")
 async def startup():
-    print("Starting pollers...")
     for task in TASK_CONFIGS:
         _poll_tasks.append(asyncio.create_task(poll_task(task)))
 
 @app.on_event("shutdown")
 async def shutdown():
-    print("Stopping pollers...")
     for task in _poll_tasks:
         task.cancel()
     await asyncio.gather(*_poll_tasks, return_exceptions=True)
