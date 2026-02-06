@@ -10,6 +10,15 @@ from datetime import datetime
 def _exc_location(exc: BaseException) -> str:
     line_no = f"Error line no {exc.__traceback__.tb_lineno}"
     return line_no
+
+def sentry_exception_handler(exc: BaseException, task_name: str, fetch_url: str, push_url: str):
+    loc = _exc_location(exc)
+    with sentry_sdk.push_scope() as scope:
+        scope.set_tag("task", task_name)
+        scope.set_extra("fetch_url", fetch_url)
+        scope.set_extra("push_url", push_url)
+        scope.set_extra("error_location", loc)
+        sentry_sdk.capture_exception(exc)
     
 
 # =========================
@@ -123,6 +132,8 @@ AUTH_TOKEN = os.getenv(
     # '1ddc3814bb51978ef905c14a6b5aed80504074de'
 )
 
+
+
 # =========================
 # SOAP PAYLOAD BUILDER
 # =========================
@@ -224,10 +235,14 @@ def build_soap_payload(operation: str, **kwargs) -> str:
     elif operation == 'GetFuelLoads':
         return get_fuel_loads_body
     
+
+
 def build_myfuel_payload(operation: str, **kwargs) -> str:
     if operation == "AddFuelOrder":
         data = kwargs.get("data", "")
         return data
+
+
 # =========================
 # FETCH DATA
 # =========================
@@ -252,7 +267,10 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
         except Exception as e:
             loc = _exc_location(e)
             print(f"General error: {e} (at {loc})")
-            raise RuntimeError(f"Failed to fetch data from PDI: {e} (at {loc})") from e
+            # raise RuntimeError(f"Failed to fetch data from PDI: {e} (at {loc})") from e
+            #Sentry reporting
+            sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+            return ""  # Return empty string on failure to allow retrying in next poll
     
     elif task["pull"] == "myfuel":
         payload = build_myfuel_payload(task["operation"], **task['kwargs'])
@@ -266,7 +284,9 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
         except Exception as e:
             loc = _exc_location(e)
             print(f"General error while fetching data: {e} (at {loc})")
-            raise RuntimeError(f"Failed to fetch data: {e} (at {loc})") from e
+            # raise RuntimeError(f"Failed to fetch data: {e} (at {loc})") from e
+            sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+            return ""  # Return empty string on failure to allow retrying in next poll
 
 # =========================
 # PUSH DATA
@@ -292,7 +312,8 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                 except Exception as e:
                     loc = _exc_location(e)
                     print(f"General error while pushing data to PDI: {e} (at {loc})")
-                    raise RuntimeError(f"Failed to push data to PDI: {e} (at {loc})") from e
+                    # raise RuntimeError(f"Failed to push data to PDI: {e} (at {loc})") from e
+                    sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
         else:
             try:
                 headers = {
@@ -308,7 +329,8 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
             except Exception as e:
                 loc = _exc_location(e)
                 print(f"General error while pushing data: {e} (at {loc})")
-                raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
+                # raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
+                sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
     
     elif task["push"] == "myfuel":
         try:
@@ -326,7 +348,9 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
         except Exception as e:
             loc = _exc_location(e)
             print(f"General error while pushing data to MyFuel: {e} (at {loc})")
-            raise RuntimeError(f"Failed to push data to MyFuel: {e} (at {loc})") from e
+            # raise RuntimeError(f"Failed to push data to MyFuel: {e} (at {loc})") from e
+            sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+
         
         
 # =========================
@@ -336,21 +360,19 @@ async def poll_task(task: dict):
     async with httpx.AsyncClient(timeout=20.0) as client:
         while True:
             try:
+                # Fetch data from source
                 data = await fetch_data(task, client)
+                # Push data to destination
                 await push_data(task, data, client)
 
             except Exception as e:
                 loc = _exc_location(e)
-                # # Sentry reporting
-                # with sentry_sdk.push_scope() as scope:
-                #     scope.set_tag("task", task["name"])
-                #     scope.set_extra("fetch_url", task["fetch_url"])
-                #     scope.set_extra("push_url", task["push_url"])
-                #     scope.set_extra("error_location", loc)
-                #     sentry_sdk.capture_exception(e)
-
-                # print(f"[{task['name']}] Error: {e} (at {loc})")
-
+                #Sentry reporting
+                sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+                print(f"Error in poll loop for task {task['name']}: {e} (at {loc})")
+                # Don't raise, just log and continue to retry in next poll
+            
+            # Wait for the specified poll interval before next iteration
             await asyncio.sleep(task["poll_interval"])
 
 # =========================
