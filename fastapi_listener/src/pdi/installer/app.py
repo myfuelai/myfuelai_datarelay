@@ -90,6 +90,22 @@ TASK_CONFIGS = [
         "push":"myfuel",
         "pull":"pdi"
     },
+    {
+        "name": "pull_myfuel_orders",
+        "fetch_url": os.getenv(
+            "MYFUEL_FETCH_URL",
+            "http://127.0.0.1:8000/v1/pdi/pull-myfuel-orders/"
+        ),
+        "push_url": os.getenv("PDI_OORDER_PUSH_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder"),
+        "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
+        "operation": "AddFuelOrder",
+        "poll_interval": 120,
+        "kwargs":{
+            "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
+        },
+        "push":"pdi",
+        "pull":"myfuel"
+    },
     # {
     #     "name": "get_fuel_loads",
     #     "fetch_url": os.getenv(
@@ -107,23 +123,7 @@ TASK_CONFIGS = [
     #     },
     #     "push":"myfuel",
     #     "pull":"pdi"
-    # },
-    {
-        "name": "pull_myfuel_orders",
-        "fetch_url": os.getenv(
-            "MYFUEL_FETCH_URL",
-            "http://127.0.0.1:8000/v1/pdi/pull-myfuel-orders/"
-        ),
-        "push_url": os.getenv("PDI_OORDER_PUSH_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder"),
-        "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
-        "operation": "AddFuelOrder",
-        "poll_interval": 120,
-        "kwargs":{
-            "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
-        },
-        "push":"pdi",
-        "pull":"myfuel"
-    }
+    # }
 ]
 
 AUTH_TOKEN = os.getenv(
@@ -131,42 +131,23 @@ AUTH_TOKEN = os.getenv(
     "00484a752f666bebdab333d53497bc0b38c02e88",
     # '1ddc3814bb51978ef905c14a6b5aed80504074de'
 )
-
+password = "MyFuelTest"
+partner_id = "MyFuel"
 
 
 # =========================
 # SOAP PAYLOAD BUILDER
 # =========================
-
-def build_soap_payload(operation: str, **kwargs) -> str:
-    password = "MyFuelTest"
-    partner_id = "MyFuel"
-    
-    get_master_data_body = f"""
-        <s:Envelope
-        xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-        <s:Header>
-            <UserCredentials
-                xmlns:h="http://profdata.com.Petronet"
-                xmlns="http://profdata.com.Petronet"
-                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-                <Password>MyFuelTest</Password>
-                <PartnerID>MyFuel</PartnerID>
-            </UserCredentials>
-        </s:Header>
-        <s:Body
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-            <GetMasterData
-                xmlns="http://profdata.com.Petronet">
-                <mode>0</mode>
-            </GetMasterData>
-        </s:Body>
-    </s:Envelope>
+def build_fuel_orders_payload(operation: str, **kwargs) -> str:
     """
-
-
+    Docstring for build_fuel_orders_payload
+    
+    :param operation: Description
+    :type operation: str
+    :param kwargs: Description
+    :return: Description
+    :rtype: str
+    """ 
     statuses = kwargs.get("StatusToInclude", [])
     if isinstance(statuses, (list, tuple)):
         statuses_list = [str(s) for s in statuses]
@@ -210,7 +191,10 @@ def build_soap_payload(operation: str, **kwargs) -> str:
             </s:Body>
         </s:Envelope>
     """
-
+    return get_fuel_orders_body
+    
+def build_fuel_loads_payload(operation: str, **kwargs) -> str:  
+    """Docstring for build_fuel_loads_payload"""  
     get_fuel_loads_body = f"""
     <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:prof="http://profdata.com.Petronet">
     <soapenv:Header>
@@ -228,16 +212,55 @@ def build_soap_payload(operation: str, **kwargs) -> str:
     </soapenv:Body>
     </soapenv:Envelope>
     """
-    if operation == 'GetFuelOrders':
-        return get_fuel_orders_body
-    elif operation == 'GetMasterData':
-        return get_master_data_body
-    elif operation == 'GetFuelLoads':
-        return get_fuel_loads_body
-    
+    return get_fuel_loads_body
 
+def get_master_data_body(operation: str, **kwargs) -> str:
+    """Docstring for get_master_data_body"""
+    get_master_data_body = f"""
+    <s:Envelope
+        xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+        <s:Header>
+            <UserCredentials
+                xmlns:h="http://profdata.com.Petronet"
+                xmlns="http://profdata.com.Petronet"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+                <Password>{password}</Password>
+                <PartnerID>{partner_id}</PartnerID>
+            </UserCredentials>
+        </s:Header>
+        <s:Body
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+            <GetMasterData
+                xmlns="http://profdata.com.Petronet">
+                <mode>{kwargs['mode']}</mode>
+            </GetMasterData>
+        </s:Body>
+    </s:Envelope>
+    """
+
+def build_soap_payload(operation: str, **kwargs) -> str:
+    """Docstring for build_soap_payload"""
+    password = "MyFuelTest"
+    partner_id = "MyFuel"
+    if operation == 'GetFuelOrders':
+        return build_fuel_orders_payload(operation, **kwargs)
+    elif operation == 'GetMasterData':
+        return get_master_data_body(operation, **kwargs)
+    # elif operation == 'GetFuelLoads':
+    #     return build_fuel_loads_payload(operation, **kwargs)
 
 def build_myfuel_payload(operation: str, **kwargs) -> str:
+    """
+    Docstring for build_myfuel_payload
+    
+    :param operation: Description
+    :type operation: str
+    :param kwargs: Description
+    :return: Description
+    :rtype: str
+    """ 
     if operation == "AddFuelOrder":
         data = kwargs.get("data", "")
         return data
@@ -350,9 +373,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
             print(f"General error while pushing data to MyFuel: {e} (at {loc})")
             # raise RuntimeError(f"Failed to push data to MyFuel: {e} (at {loc})") from e
             sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
-
-        
-        
+       
 # =========================
 # POLL LOOP PER TASK
 # =========================
