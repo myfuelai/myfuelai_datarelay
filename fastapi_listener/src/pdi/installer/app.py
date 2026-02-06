@@ -19,6 +19,13 @@ def sentry_exception_handler(exc: BaseException, task_name: str, fetch_url: str,
         scope.set_extra("push_url", push_url)
         scope.set_extra("error_location", loc)
         sentry_sdk.capture_exception(exc)
+
+def sentry_message(msg: str, task_name: str, fetch_url: str, push_url: str):
+    with sentry_sdk.push_scope() as scope:
+        scope.set_tag("task", task_name)
+        scope.set_extra("fetch_url", fetch_url)
+        scope.set_extra("push_url", push_url)
+        sentry_sdk.capture_message(msg)
     
 
 # =========================
@@ -271,6 +278,7 @@ def build_myfuel_payload(operation: str, **kwargs) -> str:
 # FETCH DATA
 # =========================
 async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
+    sentry_message(f"Fetching data for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
     if task["pull"] == "pdi":
         payload = build_soap_payload(task["operation"], **task['kwargs'])
         headers = {
@@ -286,6 +294,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
                 timeout=60.0
             )
             response.raise_for_status()
+            sentry_message(f"Successfully fetched data from PDI for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
             return response.text
         
         except Exception as e:
@@ -304,6 +313,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             }
             response = await client.post(task["fetch_url"], data=payload, headers=headers)
             response.raise_for_status()
+            sentry_message(f"Successfully fetched data from MyFuel for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
             return response.text
         except Exception as e:
             loc = _exc_location(e)
@@ -316,7 +326,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
 # PUSH DATA
 # =========================
 async def push_data(task: dict, data: str, client: httpx.AsyncClient):
-    
+    sentry_message(f"Pushing data for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
     if task["push"] == "pdi":
         if task["operation"] == "AddFuelOrder":
             headers = {
@@ -333,6 +343,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                         headers=headers
                     )
                     response.raise_for_status() 
+                    sentry_message(f"Successfully pushed order to PDI: {item.get('order_id', 'unknown')}", task["name"], task["fetch_url"], task["push_url"])
                 except Exception as e:
                     loc = _exc_location(e)
                     print(f"General error while pushing data to PDI: {e} (at {loc})")
@@ -350,6 +361,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                     headers=headers
                 )
                 response.raise_for_status()
+                sentry_message(f"Successfully pushed data to PDI for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
             except Exception as e:
                 loc = _exc_location(e)
                 print(f"General error while pushing data: {e} (at {loc})")
@@ -369,6 +381,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                 timeout=120.0  # Allow more time for MyFuel to process
             )
             response.raise_for_status()
+            sentry_message(f"Successfully pushed data to MyFuel for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
         except Exception as e:
             loc = _exc_location(e)
             print(f"General error while pushing data to MyFuel: {e} (at {loc})")
@@ -379,6 +392,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
 # POLL LOOP PER TASK
 # =========================
 async def poll_task(task: dict):
+    sentry_message(f"Starting poll loop for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
     async with httpx.AsyncClient(timeout=20.0) as client:
         while True:
             try:
