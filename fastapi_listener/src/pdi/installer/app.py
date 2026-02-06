@@ -6,6 +6,43 @@ import os
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 from datetime import datetime
+import json
+from pathlib import Path
+import logging
+from logging.handlers import RotatingFileHandler
+
+CONFIG_PATH = Path("C:\\pdi\\app\\config\\tasks.json")
+LOG_FILE = Path("C:\\pdi\\app\\logs\\app.log")
+
+
+logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger("myfuel-app")
+logger.setLevel(logging.INFO)
+
+handler = RotatingFileHandler(
+    LOG_FILE,
+    maxBytes=10 * 1024 * 1024,  # 10 MB
+    backupCount=10,
+    encoding="utf-8"
+)
+
+formatter = logging.Formatter(
+    "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+)
+
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+def load_task_configs() -> list[dict]:
+    if not CONFIG_PATH.exists():
+        raise RuntimeError(f"Task config file not found: {CONFIG_PATH}")
+
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+TASK_CONFIGS = load_task_configs()
+
 # helper to get exception location
 def _exc_location(exc: BaseException) -> str:
     line_no = f"Error line no {exc.__traceback__.tb_lineno}"
@@ -13,7 +50,7 @@ def _exc_location(exc: BaseException) -> str:
 
 def sentry_exception_handler(exc: BaseException, task_name: str, fetch_url: str, push_url: str):
     loc = _exc_location(exc)
-    print(f"Exception occurred: {exc} (at {loc})")
+    logger.error(f"Exception occurred: {exc} (at {loc})")
     with sentry_sdk.push_scope() as scope:
         scope.set_tag("task", task_name)
         scope.set_extra("fetch_url", fetch_url)
@@ -22,7 +59,7 @@ def sentry_exception_handler(exc: BaseException, task_name: str, fetch_url: str,
         sentry_sdk.capture_exception(exc)
 
 def sentry_message(msg: str, task_name: str, fetch_url: str, push_url: str):
-    print(f"Message: {msg} (Task: {task_name})")
+    logger.info(f"Message: {msg} (Task: {task_name})")
     with sentry_sdk.push_scope() as scope:
         scope.set_tag("task", task_name)
         scope.set_extra("fetch_url", fetch_url)
@@ -58,82 +95,82 @@ app = FastAPI()
 # =========================
 # TASK CONFIGURATION
 # =========================
-TASK_CONFIGS = [
-    {
-        "name": "get_master_data",
-        "fetch_url": os.getenv(
-            "MASTER_FETCH_URL",
-            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetMasterData"
-        ),
-        "push_url": os.getenv(
-            "MASTER_PUSH_URL",
-            # "https://qa-api.myfuel.ai/v1/get-master-data-webhook/"
-            "http://127.0.0.1:8000/v1/get-master-data-webhook/"
-        ),
-        "soap_action": "http://profdata.com.Petronet/GetMasterData",
-        "operation": "GetMasterData",
-        "poll_interval": 300,
-        "kwargs":{
-            "mode":"0"
-        },
-        "push":"myfuel",
-        "pull":"pdi"
-    },
-    {
-        "name": "get_fuel_orders",
-        "fetch_url": os.getenv(
-            "FUEL_FETCH_URL",
-            "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelOrders"
-        ),
-        "push_url": os.getenv(
-            "FUEL_PUSH_URL",
-            "http://127.0.0.1:8000/v1/get-fuel-orders-webhook/"
-        ),
-        "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
-        "operation": "GetFuelOrders",
-        "poll_interval": 120,
-        "kwargs":{
-            "StatusToInclude":["4","10"],
-            "RecordsToInclude":"10"
-        },
-        "push":"myfuel",
-        "pull":"pdi"
-    },
-    {
-        "name": "pull_myfuel_orders",
-        "fetch_url": os.getenv(
-            "MYFUEL_FETCH_URL",
-            "http://127.0.0.1:8000/v1/pdi/pull-myfuel-orders/"
-        ),
-        "push_url": os.getenv("PDI_OORDER_PUSH_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder"),
-        "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
-        "operation": "AddFuelOrder",
-        "poll_interval": 120,
-        "kwargs":{
-            "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
-        },
-        "push":"pdi",
-        "pull":"myfuel"
-    },
-    # {
-    #     "name": "get_fuel_loads",
-    #     "fetch_url": os.getenv(
-    #         "FUEL_FETCH_URL",
-    #         "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelLoads"
-    #     ),
-    #     "push_url": os.getenv(
-    #         "FUEL_PUSH_URL",
-    #         "http://127.0.0.1:8000/v1/get-fuel-loads-webhook/"
-    #     ),
-    #     "soap_action": "http://profdata.com.Petronet/GetFuelLoads",
-    #     "operation": "GetFuelLoads",
-    #     "poll_interval": 120,
-    #     "kwargs":{
-    #     },
-    #     "push":"myfuel",
-    #     "pull":"pdi"
-    # }
-]
+# TASK_CONFIGS = [
+#     {
+#         "name": "get_master_data",
+#         "fetch_url": os.getenv(
+#             "MASTER_FETCH_URL",
+#             "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetMasterData"
+#         ),
+#         "push_url": os.getenv(
+#             "MASTER_PUSH_URL",
+#             # "https://qa-api.myfuel.ai/v1/get-master-data-webhook/"
+#             "http://127.0.0.1:8000/v1/get-master-data-webhook/"
+#         ),
+#         "soap_action": "http://profdata.com.Petronet/GetMasterData",
+#         "operation": "GetMasterData",
+#         "poll_interval": 300,
+#         "kwargs":{
+#             "mode":"0"
+#         },
+#         "push":"myfuel",
+#         "pull":"pdi"
+#     },
+#     {
+#         "name": "get_fuel_orders",
+#         "fetch_url": os.getenv(
+#             "FUEL_FETCH_URL",
+#             "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelOrders"
+#         ),
+#         "push_url": os.getenv(
+#             "FUEL_PUSH_URL",
+#             "http://127.0.0.1:8000/v1/get-fuel-orders-webhook/"
+#         ),
+#         "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
+#         "operation": "GetFuelOrders",
+#         "poll_interval": 120,
+#         "kwargs":{
+#             "StatusToInclude":["4","10"],
+#             "RecordsToInclude":"10"
+#         },
+#         "push":"myfuel",
+#         "pull":"pdi"
+#     },
+#     {
+#         "name": "pull_myfuel_orders",
+#         "fetch_url": os.getenv(
+#             "MYFUEL_FETCH_URL",
+#             "http://127.0.0.1:8000/v1/pdi/pull-myfuel-orders/"
+#         ),
+#         "push_url": os.getenv("PDI_OORDER_PUSH_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder"),
+#         "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
+#         "operation": "AddFuelOrder",
+#         "poll_interval": 120,
+#         "kwargs":{
+#             "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
+#         },
+#         "push":"pdi",
+#         "pull":"myfuel"
+#     },
+#     # {
+#     #     "name": "get_fuel_loads",
+#     #     "fetch_url": os.getenv(
+#     #         "FUEL_FETCH_URL",
+#     #         "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelLoads"
+#     #     ),
+#     #     "push_url": os.getenv(
+#     #         "FUEL_PUSH_URL",
+#     #         "http://127.0.0.1:8000/v1/get-fuel-loads-webhook/"
+#     #     ),
+#     #     "soap_action": "http://profdata.com.Petronet/GetFuelLoads",
+#     #     "operation": "GetFuelLoads",
+#     #     "poll_interval": 120,
+#     #     "kwargs":{
+#     #     },
+#     #     "push":"myfuel",
+#     #     "pull":"pdi"
+#     # }
+# ]
 
 AUTH_TOKEN = os.getenv(
     "REMOTE_AUTH_TOKEN",
@@ -301,7 +338,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
         
         except Exception as e:
             loc = _exc_location(e)
-            print(f"General error: {e} (at {loc})")
+            logger.error(f"General error while fetching data from PDI: {e} (at {loc})")
             # raise RuntimeError(f"Failed to fetch data from PDI: {e} (at {loc})") from e
             #Sentry reporting
             sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
@@ -319,7 +356,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             return response.text
         except Exception as e:
             loc = _exc_location(e)
-            print(f"General error while fetching data: {e} (at {loc})")
+            logger.error(f"General error while fetching data from MyFuel: {e} (at {loc})")
             # raise RuntimeError(f"Failed to fetch data: {e} (at {loc})") from e
             sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
             return ""  # Return empty string on failure to allow retrying in next poll
@@ -348,7 +385,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                     sentry_message(f"Successfully pushed order to PDI: {item.get('order_id', 'unknown')}", task["name"], task["fetch_url"], task["push_url"])
                 except Exception as e:
                     loc = _exc_location(e)
-                    print(f"General error while pushing data to PDI: {e} (at {loc})")
+                    logger.error(f"General error while pushing order to PDI: {e} (at {loc})")
                     # raise RuntimeError(f"Failed to push data to PDI: {e} (at {loc})") from e
                     sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
         else:
@@ -366,7 +403,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                 sentry_message(f"Successfully pushed data to PDI for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
             except Exception as e:
                 loc = _exc_location(e)
-                print(f"General error while pushing data: {e} (at {loc})")
+                logger.error(f"General error while pushing data to PDI: {e} (at {loc})")
                 # raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
                 sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
     
@@ -386,7 +423,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
             sentry_message(f"Successfully pushed data to MyFuel for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
         except Exception as e:
             loc = _exc_location(e)
-            print(f"General error while pushing data to MyFuel: {e} (at {loc})")
+            logger.error(f"General error while pushing data to MyFuel: {e} (at {loc})")
             # raise RuntimeError(f"Failed to push data to MyFuel: {e} (at {loc})") from e
             sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
        
@@ -407,7 +444,7 @@ async def poll_task(task: dict):
                 loc = _exc_location(e)
                 #Sentry reporting
                 sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
-                print(f"Error in poll loop for task {task['name']}: {e} (at {loc})")
+                logger.error(f"Error in poll loop for task {task['name']}: {e} (at {loc})")
                 # Don't raise, just log and continue to retry in next poll
             
             # Wait for the specified poll interval before next iteration
