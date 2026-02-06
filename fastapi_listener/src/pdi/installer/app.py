@@ -239,6 +239,7 @@ def get_master_data_body(operation: str, **kwargs) -> str:
         </s:Body>
     </s:Envelope>
     """
+    return get_master_data_body
 
 def build_soap_payload(operation: str, **kwargs) -> str:
     """Docstring for build_soap_payload"""
