@@ -1,0 +1,29 @@
+[
+  {
+    "name": "get_master_data",
+    "fetch_url": "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetMasterData",
+    "push_url": "http://127.0.0.1:8000/v1/get-master-data-webhook/",
+    "soap_action": "http://profdata.com.Petronet/GetMasterData",
+    "operation": "GetMasterData",
+    "poll_interval": 300,
+    "kwargs": {
+      "mode": "0"
+    },
+    "push": "myfuel",
+    "pull": "pdi"
+  },
+  {
+    "name": "get_fuel_orders",
+    "fetch_url": "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelOrders",
+    "push_url": "http://127.0.0.1:8000/v1/get-fuel-orders-webhook/",
+    "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
+    "operation": "GetFuelOrders",
+    "poll_interval": 120,
+    "kwargs": {
+      "StatusToInclude": ["4", "10"],
+      "RecordsToInclude": "10"
+    },
+    "push": "myfuel",
+    "pull": "pdi"
+  }
+]

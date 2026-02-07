@@ -11,11 +11,14 @@ import logging
 from logging.handlers import RotatingFileHandler
 import json
 from cryptography.fernet import Fernet
+from dotenv import load_dotenv
+load_dotenv()
 
 def load_secure_env() -> dict:
-    encrypted_blob = os.getenv("APP_SECRET_BLOB")
-    secret_key = os.getenv("APP_SECRET_KEY")
-
+    secret_key = os.getenv("ENCRYPTION_KEY")
+    encrypted_blob = os.getenv("ENCRYPTED_BLOB")
+    print(f"Loaded ENCRYPTION_KEY: {'set' if secret_key else 'not set'}")
+    print(f"Loaded ENCRYPTED_BLOB: {'set' if encrypted_blob else 'not set'}")
     if not encrypted_blob or not secret_key:
         raise RuntimeError("Secure env not configured")
 
@@ -498,6 +501,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8002,
+        port=8003,
         log_level="info"
     )
