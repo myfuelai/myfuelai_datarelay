@@ -6,14 +6,42 @@ import os
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 from datetime import datetime
-import json
 from pathlib import Path
 import logging
 from logging.handlers import RotatingFileHandler
+import json
+from cryptography.fernet import Fernet
+
+def load_secure_env() -> dict:
+    encrypted_blob = os.getenv("APP_SECRET_BLOB")
+    secret_key = os.getenv("APP_SECRET_KEY")
+
+    if not encrypted_blob or not secret_key:
+        raise RuntimeError("Secure env not configured")
+
+    fernet = Fernet(secret_key.encode())
+    decrypted = fernet.decrypt(encrypted_blob.encode())
+
+    return json.loads(decrypted.decode())
+
 
 CONFIG_PATH = Path("C:\\pdi\\app\\config\\tasks.json")
 LOG_FILE = Path("C:\\pdi\\app\\logs\\app.log")
 
+SECURE_ENV = load_secure_env()
+
+SENTRY_DSN = SECURE_ENV.get(
+    "SENTRY_DSN"
+)
+AUTH_TOKEN = SECURE_ENV.get(
+    "REMOTE_AUTH_TOKEN"
+)
+password = SECURE_ENV.get(
+    "PDI_PASSWORD"
+)
+partner_id = SECURE_ENV.get(
+    "PDI_PARTNER_ID"
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -70,10 +98,7 @@ def sentry_message(msg: str, task_name: str, fetch_url: str, push_url: str):
 # =========================
 # SENTRY INITIALIZATION
 # =========================
-SENTRY_DSN = os.getenv(
-    "SENTRY_DSN",
-    "https://02cad50b70c3d463fa168f4523f08808@o4507651658153984.ingest.us.sentry.io/4510690543206400"
-)
+
 
 sentry_logging = LoggingIntegration(
     level=None,        # capture breadcrumbs
@@ -84,7 +109,7 @@ sentry_sdk.init(
     dsn=SENTRY_DSN,
     integrations=[],     # disable auto integrations
     traces_sample_rate=1.0,
-    environment=os.getenv("ENV", "qa"),
+    environment=SECURE_ENV.get("ENV"),
 )
 
 # =========================
@@ -171,14 +196,6 @@ app = FastAPI()
 #     #     "pull":"pdi"
 #     # }
 # ]
-
-AUTH_TOKEN = os.getenv(
-    "REMOTE_AUTH_TOKEN",
-    "00484a752f666bebdab333d53497bc0b38c02e88",
-    # '1ddc3814bb51978ef905c14a6b5aed80504074de'
-)
-password = "MyFuelTest"
-partner_id = "MyFuel"
 
 
 # =========================

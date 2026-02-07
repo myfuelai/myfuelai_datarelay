@@ -26,7 +26,11 @@ Step 2: Install Windows Service Using NSSM
 
 Create a Windows service named MyfuelaiConnector:
 
-nssm install MyfuelaiConnector
+nssm install MyfuelaiConnector 
+
+nssm set MyFuelApp AppEnvironmentExtra ^
+APP_SECRET_BLOB=gAAAAABl... ^
+APP_SECRET_KEY=Z1JhZV9...
 
 Configure the service with the following values:
 
