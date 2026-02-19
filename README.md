@@ -58,6 +58,9 @@ Start the service using:
 
 net start MyfuelaiConnector
 
+Stdout → C:\pdi\app\logs\stdout.log
+Stderr → C:\pdi\app\logs\stderr.log
+
 Step 4: Verify Service Status
 
 Check the service status:
