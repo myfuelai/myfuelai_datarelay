@@ -105,8 +105,8 @@ for item in fetch_config:
         base_pdi_url = item.get("api_url")
         password = item.get("password")
         partner_id = item.get("username")
-    elif item.get("name") == "MyFuel":
-        AUTH_TOKEN = item.get("api_key")
+    # elif item.get("name") == "MyFuel":
+        # AUTH_TOKEN = item.get("api_key")
         # myfuel_base_url = item.get("api_url")
 
 # helper to get exception location
