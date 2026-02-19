@@ -85,7 +85,10 @@ def get_credentials_from_myfuel():
         )
         response.raise_for_status()
         data = response.json()
-        return data
+        if data.get("config"):
+            return data["config"]
+        else:
+            raise RuntimeError("Credentials not found in MyFuel response")
     except Exception as e:
         loc = _exc_location(e)
         logger.error(f"Error fetching credentials from MyFuel: {e} (at {loc})")
@@ -94,9 +97,17 @@ def get_credentials_from_myfuel():
 
 # For demonstration, we fetch credentials at startup. In production, consider caching and refreshing as needed.
 fetch_config = get_credentials_from_myfuel()
-base_pdi_url = fetch_config.get("pdi_base_url")
-password = fetch_config.get("pdi_password")
-partner_id = fetch_config.get("pdi_partner_id")
+base_pdi_url = None
+password = None
+partner_id = None
+for item in fetch_config:
+    if item.get("name") == "PDI_BASE_URL":
+        base_pdi_url = item.get("api_url")
+        password = item.get("password")
+        partner_id = item.get("username")
+    elif item.get("name") == "MyFuel":
+        AUTH_TOKEN = item.get("api_key")
+        # myfuel_base_url = item.get("api_url")
 
 # helper to get exception location
 def _exc_location(exc: BaseException) -> str:
