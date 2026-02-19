@@ -267,9 +267,7 @@ def build_fuel_orders_payload(operation: str, **kwargs) -> str:
 				<PDIGetFuelOrdersInput
 					xmlns="">
 					<StatusToInclude>
-						<StatusToInclude>
                         {statuses_xml}
-                        </StatusToInclude>
 					</StatusToInclude>
 					<RecordsToInclude>{records}</RecordsToInclude>
 				</PDIGetFuelOrdersInput>
