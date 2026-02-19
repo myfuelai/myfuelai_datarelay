@@ -246,35 +246,37 @@ def build_fuel_orders_payload(operation: str, **kwargs) -> str:
     records = kwargs.get("RecordsToInclude", "")
 
     get_fuel_orders_body = f"""
-            <s:Envelope
-            xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-            <s:Header>
-                <UserCredentials
-                    xmlns:h="http://profdata.com.Petronet"
-                    xmlns="http://profdata.com.Petronet"
-                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-                    <Password>{password}</Password>
-                    <PartnerID>{partner_id}</PartnerID>
-                </UserCredentials>
-            </s:Header>
-            <s:Body
-                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-                <{operation}
-                    xmlns="http://profdata.com.Petronet">
-                    <PDIGetFuelOrdersFilter>
-                        <PDIGetFuelOrdersInput
-                            xmlns="">
-                            <StatusToInclude>
-                                {statuses_xml}
-                            </StatusToInclude>
-                            <RecordsToInclude>{records}</RecordsToInclude>
-                        </PDIGetFuelOrdersInput>
-                    </PDIGetFuelOrdersFilter>
-                </{operation}>
-            </s:Body>
-        </s:Envelope>
+    <s:Envelope
+	xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+	<s:Header>
+		<UserCredentials
+			xmlns:h="http://profdata.com.Petronet"
+			xmlns="http://profdata.com.Petronet"
+			xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+			xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+			<Password>{password}</Password>
+            <PartnerID>{partner_id}</PartnerID>
+		</UserCredentials>
+	</s:Header>
+	<s:Body
+		xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+		<GetFuelOrders
+			xmlns="http://profdata.com.Petronet">
+			<PDIGetFuelOrdersFilter>
+				<PDIGetFuelOrdersInput
+					xmlns="">
+					<StatusToInclude>
+						<StatusToInclude>
+                        {statuses_xml}
+                        </StatusToInclude>
+					</StatusToInclude>
+					<RecordsToInclude>{records}</RecordsToInclude>
+				</PDIGetFuelOrdersInput>
+			</PDIGetFuelOrdersFilter>
+		</GetFuelOrders>
+	</s:Body>
+</s:Envelope>
     """
     return get_fuel_orders_body
     
