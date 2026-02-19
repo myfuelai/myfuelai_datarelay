@@ -14,6 +14,8 @@ from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 load_dotenv()
 
+myfuel_base_url = "https://jrp-jupiter.myfuel.ai"
+
 def load_secure_env() -> dict:
     secret_key = os.getenv("ENCRYPTION_KEY")
     encrypted_blob = os.getenv("ENCRYPTED_BLOB")
@@ -74,6 +76,28 @@ def load_task_configs() -> list[dict]:
 
 TASK_CONFIGS = load_task_configs()
 
+def get_credentials_from_myfuel():
+    try:
+        response = httpx.get(
+            myfuel_base_url + "/api/get-pdi-credentials/",
+            headers={"Authorization": f"Token {AUTH_TOKEN}"},
+            timeout=10.0
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data
+    except Exception as e:
+        loc = _exc_location(e)
+        logger.error(f"Error fetching credentials from MyFuel: {e} (at {loc})")
+        sentry_exception_handler(e, "fetch_credentials", "https://jrp-jupiter.myfuel.ai", "N/A")
+        raise RuntimeError(f"Failed to fetch credentials from MyFuel: {e} (at {loc})") from e
+
+# For demonstration, we fetch credentials at startup. In production, consider caching and refreshing as needed.
+fetch_config = get_credentials_from_myfuel()
+base_pdi_url = fetch_config.get("pdi_base_url")
+password = fetch_config.get("pdi_password")
+partner_id = fetch_config.get("pdi_partner_id")
+
 # helper to get exception location
 def _exc_location(exc: BaseException) -> str:
     line_no = f"Error line no {exc.__traceback__.tb_lineno}"
@@ -123,82 +147,66 @@ app = FastAPI()
 # =========================
 # TASK CONFIGURATION
 # =========================
-# TASK_CONFIGS = [
-#     {
-#         "name": "get_master_data",
-#         "fetch_url": os.getenv(
-#             "MASTER_FETCH_URL",
-#             "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetMasterData"
-#         ),
-#         "push_url": os.getenv(
-#             "MASTER_PUSH_URL",
-#             # "https://qa-api.myfuel.ai/v1/get-master-data-webhook/"
-#             "http://127.0.0.1:8000/v1/get-master-data-webhook/"
-#         ),
-#         "soap_action": "http://profdata.com.Petronet/GetMasterData",
-#         "operation": "GetMasterData",
-#         "poll_interval": 300,
-#         "kwargs":{
-#             "mode":"0"
-#         },
-#         "push":"myfuel",
-#         "pull":"pdi"
-#     },
-#     {
-#         "name": "get_fuel_orders",
-#         "fetch_url": os.getenv(
-#             "FUEL_FETCH_URL",
-#             "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelOrders"
-#         ),
-#         "push_url": os.getenv(
-#             "FUEL_PUSH_URL",
-#             "http://127.0.0.1:8000/v1/get-fuel-orders-webhook/"
-#         ),
-#         "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
-#         "operation": "GetFuelOrders",
-#         "poll_interval": 120,
-#         "kwargs":{
-#             "StatusToInclude":["4","10"],
-#             "RecordsToInclude":"10"
-#         },
-#         "push":"myfuel",
-#         "pull":"pdi"
-#     },
-#     {
-#         "name": "pull_myfuel_orders",
-#         "fetch_url": os.getenv(
-#             "MYFUEL_FETCH_URL",
-#             "http://127.0.0.1:8000/v1/pdi/pull-myfuel-orders/"
-#         ),
-#         "push_url": os.getenv("PDI_OORDER_PUSH_URL", "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder"),
-#         "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
-#         "operation": "AddFuelOrder",
-#         "poll_interval": 120,
-#         "kwargs":{
-#             "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
-#         },
-#         "push":"pdi",
-#         "pull":"myfuel"
-#     },
-#     # {
-#     #     "name": "get_fuel_loads",
-#     #     "fetch_url": os.getenv(
-#     #         "FUEL_FETCH_URL",
-#     #         "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelLoads"
-#     #     ),
-#     #     "push_url": os.getenv(
-#     #         "FUEL_PUSH_URL",
-#     #         "http://127.0.0.1:8000/v1/get-fuel-loads-webhook/"
-#     #     ),
-#     #     "soap_action": "http://profdata.com.Petronet/GetFuelLoads",
-#     #     "operation": "GetFuelLoads",
-#     #     "poll_interval": 120,
-#     #     "kwargs":{
-#     #     },
-#     #     "push":"myfuel",
-#     #     "pull":"pdi"
-#     # }
-# ]
+TASK_CONFIGS = [
+    {
+        "name": "get_master_data",
+        "fetch_url": base_pdi_url + "?op=GetMasterData",
+        "push_url": myfuel_base_url + "/v1/get-master-data-webhook/",
+        "soap_action": "http://profdata.com.Petronet/GetMasterData",
+        "operation": "GetMasterData",
+        "poll_interval": 300,
+        "kwargs":{
+            "mode":"0"
+        },
+        "push":"myfuel",
+        "pull":"pdi"
+    },
+    {
+        "name": "get_fuel_orders",
+        "fetch_url": base_pdi_url + "?op=GetFuelOrders",
+        "push_url": myfuel_base_url + "/v1/get-fuel-orders-webhook/",
+        "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
+        "operation": "GetFuelOrders",
+        "poll_interval": 120,
+        "kwargs":{
+            "StatusToInclude":["4","10"],
+            "RecordsToInclude":"10"
+        },
+        "push":"myfuel",
+        "pull":"pdi"
+    },
+    {
+        "name": "pull_myfuel_orders",
+        "fetch_url": myfuel_base_url + "/v1/pdi/pull-myfuel-orders/",
+        "push_url": base_pdi_url + "?op=AddFuelOrder",
+        "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
+        "operation": "AddFuelOrder",
+        "poll_interval": 120,
+        "kwargs":{
+            "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
+        },
+        "push":"pdi",
+        "pull":"myfuel"
+    },
+    # {
+    #     "name": "get_fuel_loads",
+    #     "fetch_url": os.getenv(
+    #         "FUEL_FETCH_URL",
+    #         "http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=GetFuelLoads"
+    #     ),
+    #     "push_url": os.getenv(
+    #         "FUEL_PUSH_URL",
+    #         "http://127.0.0.1:8000/v1/get-fuel-loads-webhook/"
+    #     ),
+    #     "soap_action": "http://profdata.com.Petronet/GetFuelLoads",
+    #     "operation": "GetFuelLoads",
+    #     "poll_interval": 120,
+    #     "kwargs":{
+    #     },
+    #     "push":"myfuel",
+    #     "pull":"pdi"
+    # }
+]
 
 
 # =========================
@@ -309,8 +317,6 @@ def get_master_data_body(operation: str, **kwargs) -> str:
 
 def build_soap_payload(operation: str, **kwargs) -> str:
     """Docstring for build_soap_payload"""
-    password = "MyFuelTest"
-    partner_id = "MyFuel"
     if operation == 'GetFuelOrders':
         return build_fuel_orders_payload(operation, **kwargs)
     elif operation == 'GetMasterData':
@@ -397,7 +403,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                 order_xml = item.get('order_xml', '')
                 try:
                     response = await client.post(
-                        url="http://172.30.10.200/customerportal-77/pdienterpriseweb.asmx?op=AddFuelOrder",
+                        url= base_pdi_url + "?op=AddFuelOrder",
                         data=order_xml,
                         headers=headers
                     )
