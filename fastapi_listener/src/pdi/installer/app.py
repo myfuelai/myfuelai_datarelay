@@ -79,7 +79,7 @@ TASK_CONFIGS = load_task_configs()
 def get_credentials_from_myfuel():
     try:
         response = httpx.get(
-            myfuel_base_url + "/api/get-pdi-credentials/",
+            myfuel_base_url + "/backoffice-integrations/",
             headers={"Authorization": f"Token {AUTH_TOKEN}"},
             timeout=10.0
         )
