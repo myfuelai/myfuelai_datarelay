@@ -26,8 +26,8 @@ def load_secure_env() -> dict:
 
     fernet = Fernet(secret_key.encode())
     decrypted = fernet.decrypt(encrypted_blob.encode())
-
-    return json.loads(decrypted.decode())
+    data = json.loads(decrypted.decode())
+    return data
 
 
 CONFIG_PATH = Path("C:\\pdi\\app\\config\\tasks.json")
@@ -41,6 +41,7 @@ SENTRY_DSN = SECURE_ENV.get(
 AUTH_TOKEN = SECURE_ENV.get(
     "REMOTE_AUTH_TOKEN"
 )
+
 password = SECURE_ENV.get(
     "PDI_PASSWORD"
 )
