@@ -14,7 +14,7 @@ from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 load_dotenv()
 
-myfuel_base_url = "https://jrp-jupiter.myfuel.ai"
+myfuel_base_url = "http://localhost:8000"  # Default value, will be overridden by secure env
 
 def load_secure_env() -> dict:
     secret_key = os.getenv("ENCRYPTION_KEY")
@@ -79,7 +79,7 @@ TASK_CONFIGS = load_task_configs()
 def get_credentials_from_myfuel():
     try:
         response = httpx.get(
-            myfuel_base_url + "/backoffice-integrations-config/",
+            myfuel_base_url + "/v1/backoffice-integrations-config/",
             headers={"Authorization": f"Token {AUTH_TOKEN}"},
             timeout=10.0
         )
@@ -90,11 +90,10 @@ def get_credentials_from_myfuel():
         else:
             raise RuntimeError("Credentials not found in MyFuel response")
     except Exception as e:
-        loc = _exc_location(e)
-        logger.error(f"Error fetching credentials from MyFuel: {e} (at {loc})")
-        sentry_exception_handler(e, "fetch_credentials", "https://jrp-jupiter.myfuel.ai", "N/A")
-        raise RuntimeError(f"Failed to fetch credentials from MyFuel: {e} (at {loc})") from e
-
+    #     loc = _exc_location(e)
+    #     logger.error(f"Error fetching credentials from MyFuel: {e} (at {loc})")
+    #     sentry_exception_handler(e, "fetch_credentials", "https://jrp-jupiter.myfuel.ai", "N/A")
+        raise RuntimeError(f"Failed to fetch credentials from MyFuel: {e}") from e
 # For demonstration, we fetch credentials at startup. In production, consider caching and refreshing as needed.
 fetch_config = get_credentials_from_myfuel()
 base_pdi_url = None
