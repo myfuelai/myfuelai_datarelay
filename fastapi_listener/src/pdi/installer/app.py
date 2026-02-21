@@ -191,7 +191,7 @@ TASK_CONFIGS = [
         "operation": "AddFuelOrder",
         "poll_interval": 120,
         "kwargs":{
-            "data": datetime.utcnow().isoformat()  # Placeholder, replace with actual data to push
+            "data": datetime.datetime.now(datetime.UTC).isoformat()  # Placeholder, replace with actual data to push
         },
         "push":"pdi",
         "pull":"myfuel"
@@ -376,7 +376,7 @@ def build_myfuel_payload(operation: str, **kwargs) -> str:
 # FETCH DATA
 # =========================
 async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
-    log_start = datetime.utcnow()
+    log_start = datetime.datetime.now(datetime.UTC)
     sentry_message(f"Fetching data for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
     if task["pull"] == "pdi":
         payload = build_soap_payload(task["operation"], **task['kwargs'])
@@ -394,7 +394,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             )
             response.raise_for_status()
             sentry_message(f"Successfully fetched data from PDI for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
-            log_end = datetime.utcnow()
+            log_end = datetime.datetime.now(datetime.UTC)
             duration = (log_end - log_start).total_seconds()
             external_integration_log(
                 request=payload,
@@ -412,7 +412,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             # raise RuntimeError(f"Failed to fetch data from PDI: {e} (at {loc})") from e
             #Sentry reporting
             sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
-            log_end = datetime.utcnow()
+            log_end = datetime.datetime.now(datetime.UTC)
             duration = (log_end - log_start).total_seconds()
             external_integration_log(
                 request=payload,
@@ -445,7 +445,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
 # PUSH DATA
 # =========================
 async def push_data(task: dict, data: str, client: httpx.AsyncClient):
-    start_log = datetime.utcnow()
+    start_log = datetime.datetime.now(datetime.UTC)
     sentry_message(f"Pushing data for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
     if task["push"] == "pdi":
         if task["operation"] == "AddFuelOrder":
@@ -464,7 +464,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                     )
                     response.raise_for_status() 
                     sentry_message(f"Successfully pushed order to PDI: {item.get('order_id', 'unknown')}", task["name"], task["fetch_url"], task["push_url"])
-                    log_end = datetime.utcnow()
+                    log_end = datetime.datetime.now(datetime.UTC)
                     duration = (log_end - start_log).total_seconds()
                     external_integration_log(
                         request=order_xml,
@@ -479,7 +479,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                     logger.error(f"General error while pushing order to PDI: {e} (at {loc})")
                     # raise RuntimeError(f"Failed to push data to PDI: {e} (at {loc})") from e
                     sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
-                    log_end = datetime.utcnow()
+                    log_end = datetime.datetime.now(datetime.UTC)
                     duration = (log_end - start_log).total_seconds()
                     external_integration_log(
                         request=order_xml,
@@ -502,7 +502,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                 )
                 response.raise_for_status()
                 sentry_message(f"Successfully pushed data to PDI for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
-                log_end = datetime.utcnow()
+                log_end = datetime.datetime.now(datetime.UTC)
                 duration = (log_end - start_log).total_seconds()
                 external_integration_log(
                     request=data,
@@ -517,7 +517,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                 logger.error(f"General error while pushing data to PDI: {e} (at {loc})")
                 # raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
                 sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
-                log_end = datetime.utcnow()
+                log_end = datetime.datetime.now(datetime.UTC)
                 duration = (log_end - start_log).total_seconds()
                 external_integration_log(
                     request=data,
@@ -530,7 +530,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
 
     
     elif task["push"] == "myfuel":
-        log_start = datetime.utcnow()
+        log_start = datetime.datetime.now(datetime.UTC)
         try:
             headers = {
                 "Content-Type": "application/xml",
@@ -544,7 +544,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
             )
             response.raise_for_status()
             sentry_message(f"Successfully pushed data to MyFuel for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
-            log_end = datetime.utcnow()
+            log_end = datetime.datetime.now(datetime.UTC)
             duration = (log_end - log_start).total_seconds()
             external_integration_log(
                 request=data,
@@ -560,7 +560,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
             logger.error(f"General error while pushing data to MyFuel: {e} (at {loc})")
             # raise RuntimeError(f"Failed to push data to MyFuel: {e} (at {loc})") from e
             sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
-            log_end = datetime.utcnow()
+            log_end = datetime.datetime.now(datetime.UTC)
             duration = (log_end - log_start).total_seconds()
             external_integration_log(
                 request=data,
