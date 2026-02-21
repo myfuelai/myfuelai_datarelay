@@ -6,8 +6,8 @@ key = Fernet.generate_key()
 print("ENCRYPTION_KEY =", key.decode())
 
 fernet = Fernet(key)
-
-with open("secrets.json", "rb") as f:
+#fastapi_listener\src\pdi\installer\secrets.json
+with open("fastapi_listener\src\pdi\installer\secrets.json", "rb") as f:
     encrypted = fernet.encrypt(f.read())
 
 print("ENCRYPTED_BLOB =", encrypted.decode())

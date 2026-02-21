@@ -14,7 +14,7 @@ from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 load_dotenv()
 
-myfuel_base_url = "http://localhost:8000"  # Default value, will be overridden by secure env
+# myfuel_base_url = "http://localhost:8000"  # Default value, will be overridden by secure env
 
 def load_secure_env() -> dict:
     secret_key = os.getenv("ENCRYPTION_KEY")
@@ -41,12 +41,9 @@ SENTRY_DSN = SECURE_ENV.get(
 AUTH_TOKEN = SECURE_ENV.get(
     "REMOTE_AUTH_TOKEN"
 )
-
-password = SECURE_ENV.get(
-    "PDI_PASSWORD"
-)
-partner_id = SECURE_ENV.get(
-    "PDI_PARTNER_ID"
+myfuel_base_url = SECURE_ENV.get(
+    "MYFUEL_BASE_URL",
+    "http://localhost:8000"
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -165,9 +162,9 @@ TASK_CONFIGS = [
         "push_url": myfuel_base_url + "/v1/get-master-data-webhook/",
         "soap_action": "http://profdata.com.Petronet/GetMasterData",
         "operation": "GetMasterData",
-        "poll_interval": 300,
+        "poll_interval": 600,
         "kwargs":{
-            "mode":"0"
+            "mode":"1"
         },
         "push":"myfuel",
         "pull":"pdi"
@@ -180,8 +177,8 @@ TASK_CONFIGS = [
         "operation": "GetFuelOrders",
         "poll_interval": 120,
         "kwargs":{
-            "StatusToInclude":["4","10"],
-            "RecordsToInclude":"10"
+            "StatusToInclude":["1"],
+            "RecordsToInclude":"1"
         },
         "push":"myfuel",
         "pull":"pdi"
