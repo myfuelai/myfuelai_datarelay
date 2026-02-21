@@ -11,6 +11,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import json
 from cryptography.fernet import Fernet
+import requests
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -156,19 +157,19 @@ app = FastAPI()
 # TASK CONFIGURATION
 # =========================
 TASK_CONFIGS = [
-    {
-        "name": "get_master_data",
-        "fetch_url": base_pdi_url + "?op=GetMasterData",
-        "push_url": myfuel_base_url + "/v1/get-master-data-webhook/",
-        "soap_action": "http://profdata.com.Petronet/GetMasterData",
-        "operation": "GetMasterData",
-        "poll_interval": 600,
-        "kwargs":{
-            "mode":"1"
-        },
-        "push":"myfuel",
-        "pull":"pdi"
-    },
+    # {
+    #     "name": "get_master_data",
+    #     "fetch_url": base_pdi_url + "?op=GetMasterData",
+    #     "push_url": myfuel_base_url + "/v1/get-master-data-webhook/",
+    #     "soap_action": "http://profdata.com.Petronet/GetMasterData",
+    #     "operation": "GetMasterData",
+    #     "poll_interval": 600,
+    #     "kwargs":{
+    #         "mode":"1"
+    #     },
+    #     "push":"myfuel",
+    #     "pull":"pdi"
+    # },
     {
         "name": "get_fuel_orders",
         "fetch_url": base_pdi_url + "?op=GetFuelOrders",
@@ -178,24 +179,24 @@ TASK_CONFIGS = [
         "poll_interval": 120,
         "kwargs":{
             "StatusToInclude":["1"],
-            "RecordsToInclude":"1"
+            "RecordsToInclude":"3"
         },
         "push":"myfuel",
         "pull":"pdi"
     },
-    {
-        "name": "pull_myfuel_orders",
-        "fetch_url": myfuel_base_url + "/v1/pdi/pull-myfuel-orders/",
-        "push_url": base_pdi_url + "?op=AddFuelOrder",
-        "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
-        "operation": "AddFuelOrder",
-        "poll_interval": 120,
-        "kwargs":{
-            "data": datetime.datetime.now(datetime.UTC).isoformat()  # Placeholder, replace with actual data to push
-        },
-        "push":"pdi",
-        "pull":"myfuel"
-    },
+    # {
+    #     "name": "pull_myfuel_orders",
+    #     "fetch_url": myfuel_base_url + "/v1/pdi/pull-myfuel-orders/",
+    #     "push_url": base_pdi_url + "?op=AddFuelOrder",
+    #     "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
+    #     "operation": "AddFuelOrder",
+    #     "poll_interval": 120,
+    #     "kwargs":{
+    #         "data": datetime.datetime.now(datetime.UTC).isoformat()  # Placeholder, replace with actual data to push
+    #     },
+    #     "push":"pdi",
+    #     "pull":"myfuel"
+    # },
     # {
     #     "name": "get_fuel_loads",
     #     "fetch_url": os.getenv(
@@ -220,23 +221,22 @@ def external_integration_log(request, response, status,
             duration, direction, event_name, backoffice_integration_name='PDI'):
     log_entry = {
         "backoffice_integration_name": backoffice_integration_name,
-        "request": request,
-        "response": response,
+        "request": request.replace("\n", "").replace('""',"''"),
+        "response": response.replace("\n", "").replace('""',"''"),
         "status": status,
-        "duration": duration,
+        "duration": int(duration),
         "direction": direction,
         "event_name": event_name
     }
     myfuel_log_api_url = myfuel_base_url + "/v1/backoffice-integration-log/"
     try:
-        response = httpx.post(
+        response = requests.post(
             myfuel_log_api_url,
             json=log_entry,
             headers={"Authorization": f"Token {AUTH_TOKEN}"},
             timeout=5.0
         )
-        response.raise_for_status()
-        return response.json()
+        return response.status_code
     except Exception as e:
         loc = _exc_location(e)
         logger.error(f"Failed to log external integration event to MyFuel: {e} (at {loc})")
