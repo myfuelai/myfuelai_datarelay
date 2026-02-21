@@ -5,7 +5,7 @@ import httpx
 import os
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
-from datetime import datetime
+import datetime
 from pathlib import Path
 import logging
 from logging.handlers import RotatingFileHandler
