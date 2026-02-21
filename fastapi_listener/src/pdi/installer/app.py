@@ -449,14 +449,15 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
     sentry_message(f"Pushing data for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
     if task["push"] == "pdi":
         if task["operation"] == "AddFuelOrder":
-            headers = {
-                "Content-Type": "text/xml; charset=utf-8",
-                "SOAPAction": 'http://profdata.com.Petronet/AddFuelOrder'
-            }
             json_data = httpx.Response(200, content=data).json()
             for item in json_data.get('orders', []):
                 order_xml = item.get('order_xml', '')
+                soap_action = 'AddFuelOrder' if 'AddFuelOrder' in order_xml else 'UpdateFuelOrder' if 'UpdateFuelOrder' in order_xml else 'CancelFuelOrder' if 'CancelFuelOrder' in order_xml else None
                 try:
+                    headers = {
+                        "Content-Type": "text/xml; charset=utf-8",
+                        "SOAPAction": f'http://profdata.com.Petronet/{soap_action}'
+                    }
                     response = await client.post(
                         url= base_pdi_url + "?op=AddFuelOrder",
                         data=order_xml,
