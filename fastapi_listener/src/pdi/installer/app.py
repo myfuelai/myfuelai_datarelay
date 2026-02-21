@@ -179,7 +179,7 @@ TASK_CONFIGS = [
         "poll_interval": 120,
         "kwargs":{
             "StatusToInclude":["1"],
-            "RecordsToInclude":"3"
+            "RecordsToInclude":"1"
         },
         "push":"myfuel",
         "pull":"pdi"
@@ -218,7 +218,7 @@ TASK_CONFIGS = [
 ]
 
 def external_integration_log(request, response, status,
-            duration, direction, event_name, backoffice_integration_name='PDI'):
+            duration, direction, event_name, backoffice_integration_name='PDI_BASE_URL'):
     log_entry = {
         "backoffice_integration_name": backoffice_integration_name,
         "request": request.replace("\n", "").replace('""',"''"),
