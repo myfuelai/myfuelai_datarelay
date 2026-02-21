@@ -216,6 +216,31 @@ TASK_CONFIGS = [
     # }
 ]
 
+def external_integration_log(request, response, status,
+            duration, direction, event_name, backoffice_integration_name='PDI'):
+    log_entry = {
+        "backoffice_integration_name": backoffice_integration_name,
+        "request": request,
+        "response": response,
+        "status": status,
+        "duration": duration,
+        "direction": direction,
+        "event_name": event_name
+    }
+    myfuel_log_api_url = myfuel_base_url + "/v1/backoffice-integration-log/"
+    try:
+        response = httpx.post(
+            myfuel_log_api_url,
+            json=log_entry,
+            headers={"Authorization": f"Token {AUTH_TOKEN}"},
+            timeout=5.0
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        loc = _exc_location(e)
+        logger.error(f"Failed to log external integration event to MyFuel: {e} (at {loc})")
+
 
 # =========================
 # SOAP PAYLOAD BUILDER
@@ -351,6 +376,7 @@ def build_myfuel_payload(operation: str, **kwargs) -> str:
 # FETCH DATA
 # =========================
 async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
+    log_start = datetime.utcnow()
     sentry_message(f"Fetching data for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
     if task["pull"] == "pdi":
         payload = build_soap_payload(task["operation"], **task['kwargs'])
@@ -368,6 +394,16 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             )
             response.raise_for_status()
             sentry_message(f"Successfully fetched data from PDI for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
+            log_end = datetime.utcnow()
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=payload,
+                response=response.text,
+                status=response.status_code,
+                duration=duration,
+                direction="Inbound",
+                event_name=task["operation"]
+            )
             return response.text
         
         except Exception as e:
@@ -376,6 +412,16 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             # raise RuntimeError(f"Failed to fetch data from PDI: {e} (at {loc})") from e
             #Sentry reporting
             sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+            log_end = datetime.utcnow()
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=payload,
+                response=str(e),
+                status=400,
+                duration=duration,
+                direction="Inbound",
+                event_name=task["operation"]
+            )
             return ""  # Return empty string on failure to allow retrying in next poll
     
     elif task["pull"] == "myfuel":
@@ -399,6 +445,7 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
 # PUSH DATA
 # =========================
 async def push_data(task: dict, data: str, client: httpx.AsyncClient):
+    start_log = datetime.utcnow()
     sentry_message(f"Pushing data for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
     if task["push"] == "pdi":
         if task["operation"] == "AddFuelOrder":
@@ -417,11 +464,31 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                     )
                     response.raise_for_status() 
                     sentry_message(f"Successfully pushed order to PDI: {item.get('order_id', 'unknown')}", task["name"], task["fetch_url"], task["push_url"])
+                    log_end = datetime.utcnow()
+                    duration = (log_end - start_log).total_seconds()
+                    external_integration_log(
+                        request=order_xml,
+                        response=response.text,
+                        status=response.status_code,
+                        duration=duration,
+                        direction="Outbound",
+                        event_name="AddFuelOrder"
+                    )
                 except Exception as e:
                     loc = _exc_location(e)
                     logger.error(f"General error while pushing order to PDI: {e} (at {loc})")
                     # raise RuntimeError(f"Failed to push data to PDI: {e} (at {loc})") from e
                     sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+                    log_end = datetime.utcnow()
+                    duration = (log_end - start_log).total_seconds()
+                    external_integration_log(
+                        request=order_xml,
+                        response=str(e),
+                        status=400,
+                        duration=duration,
+                        direction="Outbound",
+                        event_name="AddFuelOrder"
+                    )
         else:
             try:
                 headers = {
@@ -435,13 +502,35 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                 )
                 response.raise_for_status()
                 sentry_message(f"Successfully pushed data to PDI for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
+                log_end = datetime.utcnow()
+                duration = (log_end - start_log).total_seconds()
+                external_integration_log(
+                    request=data,
+                    response=response.text,
+                    status=response.status_code,
+                    duration=duration,
+                    direction="Outbound",
+                    event_name=task["operation"]
+                )
             except Exception as e:
                 loc = _exc_location(e)
                 logger.error(f"General error while pushing data to PDI: {e} (at {loc})")
                 # raise RuntimeError(f"Failed to push data: {e} (at {loc})") from e
                 sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+                log_end = datetime.utcnow()
+                duration = (log_end - start_log).total_seconds()
+                external_integration_log(
+                    request=data,
+                    response=str(e),
+                    status=400,
+                    duration=duration,
+                    direction="Outbound",
+                    event_name=task["operation"]
+                )
+
     
     elif task["push"] == "myfuel":
+        log_start = datetime.utcnow()
         try:
             headers = {
                 "Content-Type": "application/xml",
@@ -455,12 +544,32 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
             )
             response.raise_for_status()
             sentry_message(f"Successfully pushed data to MyFuel for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
+            log_end = datetime.utcnow()
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=data,
+                response=response.text,
+                status=response.status_code,
+                duration=duration,
+                direction="Outbound",
+                event_name=task["operation"]
+            )
+
         except Exception as e:
             loc = _exc_location(e)
             logger.error(f"General error while pushing data to MyFuel: {e} (at {loc})")
             # raise RuntimeError(f"Failed to push data to MyFuel: {e} (at {loc})") from e
             sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
-       
+            log_end = datetime.utcnow()
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=data,
+                response=str(e),
+                status=400,
+                duration=duration,
+                direction="Outbound",
+                event_name=task["operation"]
+            )
 # =========================
 # POLL LOOP PER TASK
 # =========================
