@@ -15,8 +15,6 @@ import requests
 from dotenv import load_dotenv
 load_dotenv()
 
-# myfuel_base_url = "http://localhost:8000"  # Default value, will be overridden by secure env
-
 def load_secure_env() -> dict:
     secret_key = os.getenv("ENCRYPTION_KEY")
     encrypted_blob = os.getenv("ENCRYPTED_BLOB")
@@ -46,7 +44,7 @@ myfuel_base_url = SECURE_ENV.get(
     "MYFUEL_BASE_URL",
     "http://localhost:8000"
 )
-
+# myfuel_base_url = "http://localhost:8000" 
 logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger("myfuel-app")
@@ -170,33 +168,33 @@ TASK_CONFIGS = [
     #     "push":"myfuel",
     #     "pull":"pdi"
     # },
-    {
-        "name": "get_fuel_orders",
-        "fetch_url": base_pdi_url + "?op=GetFuelOrders",
-        "push_url": myfuel_base_url + "/v1/get-fuel-orders-webhook/",
-        "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
-        "operation": "GetFuelOrders",
-        "poll_interval": 120,
-        "kwargs":{
-            "StatusToInclude":["1"],
-            "RecordsToInclude":"1"
-        },
-        "push":"myfuel",
-        "pull":"pdi"
-    },
     # {
-    #     "name": "pull_myfuel_orders",
-    #     "fetch_url": myfuel_base_url + "/v1/pdi/pull-myfuel-orders/",
-    #     "push_url": base_pdi_url + "?op=AddFuelOrder",
-    #     "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
-    #     "operation": "AddFuelOrder",
+    #     "name": "get_fuel_orders",
+    #     "fetch_url": base_pdi_url + "?op=GetFuelOrders",
+    #     "push_url": myfuel_base_url + "/v1/get-fuel-orders-webhook/",
+    #     "soap_action": "http://profdata.com.Petronet/GetFuelOrders",
+    #     "operation": "GetFuelOrders",
     #     "poll_interval": 120,
     #     "kwargs":{
-    #         "data": datetime.datetime.now(datetime.UTC).isoformat()  # Placeholder, replace with actual data to push
+    #         "StatusToInclude":["1"],
+    #         "RecordsToInclude":"1"
     #     },
-    #     "push":"pdi",
-    #     "pull":"myfuel"
+    #     "push":"myfuel",
+    #     "pull":"pdi"
     # },
+    {
+        "name": "pull_myfuel_orders",
+        "fetch_url": myfuel_base_url + "/v1/pdi/pull-myfuel-orders/",
+        "push_url": base_pdi_url + "?op=AddFuelOrder",
+        "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
+        "operation": "AddFuelOrder",
+        "poll_interval": 120,
+        "kwargs":{
+            "data": datetime.datetime.now(datetime.UTC).isoformat()  # Placeholder, replace with actual data to push
+        },
+        "push":"pdi",
+        "pull":"myfuel"
+    },
     # {
     #     "name": "get_fuel_loads",
     #     "fetch_url": os.getenv(
@@ -393,13 +391,15 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
                 timeout=60.0
             )
             response.raise_for_status()
+            res = response.text
+            status_code = response.status_code
             sentry_message(f"Successfully fetched data from PDI for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
             log_end = datetime.datetime.now(datetime.UTC)
             duration = (log_end - log_start).total_seconds()
             external_integration_log(
                 request=payload,
-                response=response.text,
-                status=response.status_code,
+                response=res,
+                status=status_code,
                 duration=duration,
                 direction="Inbound",
                 event_name=task["operation"]
@@ -449,6 +449,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
     sentry_message(f"Pushing data for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
     if task["push"] == "pdi":
         if task["operation"] == "AddFuelOrder":
+            
             json_data = httpx.Response(200, content=data).json()
             for item in json_data.get('orders', []):
                 order_xml = item.get('order_xml', '')
@@ -459,18 +460,20 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                         "SOAPAction": f'http://profdata.com.Petronet/{soap_action}'
                     }
                     response = await client.post(
-                        url= base_pdi_url + "?op=AddFuelOrder",
+                        url= base_pdi_url,
                         data=order_xml,
                         headers=headers
                     )
                     response.raise_for_status() 
+                    res = response.text
+                    status_code = 400 if'PDIExceptionMessage' in res else response.status_code
                     sentry_message(f"Successfully pushed order to PDI: {item.get('order_id', 'unknown')}", task["name"], task["fetch_url"], task["push_url"])
                     log_end = datetime.datetime.now(datetime.UTC)
                     duration = (log_end - start_log).total_seconds()
                     external_integration_log(
                         request=order_xml,
-                        response=response.text,
-                        status=response.status_code,
+                        response=res,
+                        status=status_code,
                         duration=duration,
                         direction="Outbound",
                         event_name="AddFuelOrder"
