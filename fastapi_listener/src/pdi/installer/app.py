@@ -466,7 +466,7 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                     )
                     response.raise_for_status() 
                     res = response.text
-                    status_code = 400 if'PDIExceptionMessage' in res else response.status_code
+                    status_code = 400 if 'PDIExceptionMessage' in res else response.status_code
                     sentry_message(f"Successfully pushed order to PDI: {item.get('order_id', 'unknown')}", task["name"], task["fetch_url"], task["push_url"])
                     log_end = datetime.datetime.now(datetime.UTC)
                     duration = (log_end - start_log).total_seconds()
@@ -478,6 +478,21 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                         direction="Outbound",
                         event_name="AddFuelOrder"
                     )
+                    if status_code != 400 and item.get('order_id'):
+                        headers = {
+                            "Content-Type": "application/xml",
+                            "Authorization": f"Token {AUTH_TOKEN}"
+                        }
+                        back_office_data = {
+                            "order_id": item.get('order_id'),
+                            'back_office_order_number':item.get('order_id')
+                        }
+                        response = await client.post(
+                            myfuel_base_url+ '/v1/order-backoffice-number-update/',
+                            data=json.dumps(back_office_data),
+                            headers=headers
+                        )
+                        response.raise_for_status()
                 except Exception as e:
                     loc = _exc_location(e)
                     logger.error(f"General error while pushing order to PDI: {e} (at {loc})")
