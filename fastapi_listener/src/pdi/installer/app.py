@@ -155,19 +155,19 @@ app = FastAPI()
 # TASK CONFIGURATION
 # =========================
 TASK_CONFIGS = [
-    # {
-    #     "name": "get_master_data",
-    #     "fetch_url": base_pdi_url + "?op=GetMasterData",
-    #     "push_url": myfuel_base_url + "/v1/get-master-data-webhook/",
-    #     "soap_action": "http://profdata.com.Petronet/GetMasterData",
-    #     "operation": "GetMasterData",
-    #     "poll_interval": 600,
-    #     "kwargs":{
-    #         "mode":"1"
-    #     },
-    #     "push":"myfuel",
-    #     "pull":"pdi"
-    # },
+    {
+        "name": "get_master_data",
+        "fetch_url": base_pdi_url + "?op=GetMasterData",
+        "push_url": myfuel_base_url + "/v1/get-master-data-webhook/",
+        "soap_action": "http://profdata.com.Petronet/GetMasterData",
+        "operation": "GetMasterData",
+        "poll_interval": 900,
+        "kwargs":{
+            "mode":"1"
+        },
+        "push":"myfuel",
+        "pull":"pdi"
+    },
     # {
     #     "name": "get_fuel_orders",
     #     "fetch_url": base_pdi_url + "?op=GetFuelOrders",
@@ -188,7 +188,7 @@ TASK_CONFIGS = [
         "push_url": base_pdi_url + "?op=AddFuelOrder",
         "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
         "operation": "AddFuelOrder",
-        "poll_interval": 120,
+        "poll_interval": 300,
         "kwargs":{
             "data": datetime.datetime.now(datetime.UTC).isoformat()  # Placeholder, replace with actual data to push
         },
