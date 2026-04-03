@@ -72,9 +72,13 @@ logger.addHandler(handler)
 
 def load_task_configs() -> list[dict]:
     if not CONFIG_PATH.exists():
-        raise RuntimeError(f"Task config file not found: {CONFIG_PATH}")
+        logger.warning(f"Task config file not found: {CONFIG_PATH} — creating empty config and exiting.")
+        CONFIG_PATH.write_text("[]", encoding="utf-8")
+        import sys
+        sys.exit(0)
 
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        logger.info(f"Loading task config from: {CONFIG_PATH}")
         return json.load(f)
 
 TASK_CONFIGS = load_task_configs()
