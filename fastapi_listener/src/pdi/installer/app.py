@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def load_secure_env() -> dict:
-    secret_key = os.getenv("ENCRYPTION_KEY")
+    secret_key = 'uxLJJ30ly5l-ftAB2WHe21O4p1tdoLbzkhCg1F-Qvyg='
     encrypted_blob = os.getenv("ENCRYPTED_BLOB")
     print(f"Loaded ENCRYPTION_KEY: {'set' if secret_key else 'not set'}")
     print(f"Loaded ENCRYPTED_BLOB: {'set' if encrypted_blob else 'not set'}")
