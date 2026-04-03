@@ -3,6 +3,7 @@ import uvicorn
 import asyncio
 import httpx
 import os
+import sys
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 import datetime
@@ -29,7 +30,10 @@ def load_secure_env() -> dict:
     return data
 
 
-BASE_DIR = Path(__file__).resolve().parent
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config" / "tasks.json"
 LOG_FILE = BASE_DIR / "logs" / "app.log"
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
