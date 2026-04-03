@@ -29,8 +29,14 @@ def load_secure_env() -> dict:
     return data
 
 
-CONFIG_PATH = Path("C:\\pdi\\app\\config\\tasks.json")
-LOG_FILE = Path("C:\\pdi\\app\\logs\\app.log")
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = BASE_DIR / "config" / "tasks.json"
+LOG_FILE = BASE_DIR / "logs" / "app.log"
+LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+print(f"[PATH] BASE_DIR resolved to: {BASE_DIR}")
+print(f"[PATH] CONFIG_PATH resolved to: {CONFIG_PATH}")
+print(f"[PATH] LOG_FILE resolved to: {LOG_FILE}")
 
 SECURE_ENV = load_secure_env()
 
