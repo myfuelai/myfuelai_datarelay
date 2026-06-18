@@ -13,14 +13,20 @@ from logging.handlers import RotatingFileHandler
 import json
 from cryptography.fernet import Fernet
 import requests
+import re
 from dotenv import load_dotenv
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger("myfuel-app")
+logger.setLevel(logging.INFO)
+
 def load_secure_env() -> dict:
+    # secret_key = os.getenv("ENCRYPTION_KEY")
     secret_key = 'uxLJJ30ly5l-ftAB2WHe21O4p1tdoLbzkhCg1F-Qvyg='
     encrypted_blob = os.getenv("ENCRYPTED_BLOB")
-    print(f"Loaded ENCRYPTION_KEY: {'set' if secret_key else 'not set'}")
-    print(f"Loaded ENCRYPTED_BLOB: {'set' if encrypted_blob else 'not set'}")
+    logger.info(f"Loading secure environment variables. Encrypted blob present: {'Yes' if encrypted_blob else 'No'}, Encryption key present: {'Yes' if secret_key else 'No'}")
     if not encrypted_blob or not secret_key:
         raise RuntimeError("Secure env not configured")
 
@@ -52,13 +58,10 @@ AUTH_TOKEN = SECURE_ENV.get(
 )
 myfuel_base_url = SECURE_ENV.get(
     "MYFUEL_BASE_URL",
-    "http://localhost:8000"
+    "https://jrp-jupiter-api.myfuel.ai"
 )
 # myfuel_base_url = "http://localhost:8000" 
-logging.basicConfig(level=logging.INFO)
 
-logger = logging.getLogger("myfuel-app")
-logger.setLevel(logging.INFO)
 
 handler = RotatingFileHandler(
     LOG_FILE,
@@ -74,18 +77,18 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-def load_task_configs() -> list[dict]:
-    if not CONFIG_PATH.exists():
-        logger.warning(f"Task config file not found: {CONFIG_PATH} — creating empty config and exiting.")
-        CONFIG_PATH.write_text("[]", encoding="utf-8")
-        import sys
-        sys.exit(0)
+# def load_task_configs() -> list[dict]:
+#     if not CONFIG_PATH.exists():
+#         logger.warning(f"Task config file not found: {CONFIG_PATH} — creating empty config and exiting.")
+#         CONFIG_PATH.write_text("[]", encoding="utf-8")
+#         import sys
+#         sys.exit(0)
 
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        logger.info(f"Loading task config from: {CONFIG_PATH}")
-        return json.load(f)
+#     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+#         logger.info(f"Loading task config from: {CONFIG_PATH}")
+#         return json.load(f)
 
-TASK_CONFIGS = load_task_configs()
+# TASK_CONFIGS = load_task_configs()
 
 def get_credentials_from_myfuel():
     try:
@@ -118,6 +121,12 @@ for item in fetch_config:
     # elif item.get("name") == "MyFuel":
         # AUTH_TOKEN = item.get("api_key")
         # myfuel_base_url = item.get("api_url")
+
+# Validate PDI configuration
+if not base_pdi_url:
+    logger.warning("PDI base URL not configured in MyFuel API response")
+else:
+    logger.info(f"PDI base URL configured: {base_pdi_url}")
 
 # helper to get exception location
 def _exc_location(exc: BaseException) -> str:
@@ -171,7 +180,7 @@ app = FastAPI()
 TASK_CONFIGS = [
     {
         "name": "get_master_data",
-        "fetch_url": base_pdi_url + "?op=GetMasterData",
+        "fetch_url": "https://entweb.jrpenergy.com/CustomerPortal/PDIEnterpriseWeb.ASMX?op=GetMasterData",
         "push_url": myfuel_base_url + "/v1/get-master-data-webhook/",
         "soap_action": "http://profdata.com.Petronet/GetMasterData",
         "operation": "GetMasterData",
@@ -202,12 +211,29 @@ TASK_CONFIGS = [
         "push_url": base_pdi_url + "?op=AddFuelOrder",
         "soap_action": 'http://profdata.com.Petronet/AddFuelOrder',
         "operation": "AddFuelOrder",
-        "poll_interval": 300,
+        "poll_interval": 120,
         "kwargs":{
             "data": datetime.datetime.now(datetime.UTC).isoformat()  # Placeholder, replace with actual data to push
         },
         "push":"pdi",
         "pull":"myfuel"
+    },
+    {
+        "name": "smarttank_inventory_sync",
+        # SOURCE we pull current inventories from (Smart Tank system).
+        "fetch_url": "http://172.30.10.142/api/myfuel/get-current-inventories",
+        # DESTINATION we push the inventories to (MyFuel).
+        "push_url": myfuel_base_url + "/v1/asset-tank/smarttank-inventory-sync/",
+        "operation": "GetCurrentInventories",
+        "poll_interval": 900,
+        # JSON request body sent to the Smart Tank system.
+        "payload": {
+            "apiKey": "iQSV9kwqaJdCNmhlBPejm0na2nZdOqg9",
+            "customerIDList": "ALL",
+            "shipToIDList": "ALL"
+        },
+        "push": "myfuel_json",
+        "pull": "smarttank"
     },
     # {
     #     "name": "get_fuel_loads",
@@ -230,7 +256,8 @@ TASK_CONFIGS = [
 ]
 
 def external_integration_log(request, response, status,
-            duration, direction, event_name, backoffice_integration_name='PDI_BASE_URL'):
+            duration, direction, event_name, backoffice_integration_name='PDI_BASE_URL', 
+            model_type_id=None, model_record_id=None):
     log_entry = {
         "backoffice_integration_name": backoffice_integration_name,
         "request": request.replace("\n", "").replace('""',"''"),
@@ -238,7 +265,9 @@ def external_integration_log(request, response, status,
         "status": status,
         "duration": int(duration),
         "direction": direction,
-        "event_name": event_name
+        "event_name": event_name,
+        "model_type": model_type_id,
+        "model_record_id": model_record_id
     }
     myfuel_log_api_url = myfuel_base_url + "/v1/backoffice-integration-log/"
     try:
@@ -455,6 +484,48 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
             return ""  # Return empty string on failure to allow retrying in next poll
 
+    elif task["pull"] == "smarttank":
+        # Pull current inventories from the Smart Tank system. The request body
+        # is a JSON payload (apiKey + filters) supplied on the task config.
+        payload = task.get("payload", {})
+        try:
+            response = await client.post(
+                task["fetch_url"],
+                json=payload,
+                timeout=60.0
+            )
+            response.raise_for_status()
+            res = response.text
+            status_code = response.status_code
+            sentry_message(f"Successfully fetched data from SmartTank for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
+            log_end = datetime.datetime.now(datetime.UTC)
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=json.dumps(payload),
+                response=res,
+                status=status_code,
+                duration=duration,
+                direction="Inbound",
+                event_name=task["operation"]
+            )
+            return res
+        except Exception as e:
+            loc = _exc_location(e)
+            logger.error(f"General error while fetching data from SmartTank: {e} (at {loc})")
+            sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+            log_end = datetime.datetime.now(datetime.UTC)
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=json.dumps(payload),
+                response=str(e),
+                status=400,
+                duration=duration,
+                direction="Inbound",
+                event_name=task["operation"]
+            )
+            return ""  # Return empty string on failure to allow retrying in next poll
+
+
 # =========================
 # PUSH DATA
 # =========================
@@ -469,6 +540,9 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                 order_xml = item.get('order_xml', '')
                 soap_action = 'AddFuelOrder' if 'AddFuelOrder' in order_xml else 'UpdateFuelOrder' if 'UpdateFuelOrder' in order_xml else 'CancelFuelOrder' if 'CancelFuelOrder' in order_xml else None
                 try:
+                    if not base_pdi_url:
+                        raise RuntimeError("PDI base URL is not configured. Please check the MyFuel API configuration.")
+                    
                     headers = {
                         "Content-Type": "text/xml; charset=utf-8",
                         "SOAPAction": f'http://profdata.com.Petronet/{soap_action}'
@@ -478,10 +552,14 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                         data=order_xml,
                         headers=headers
                     )
-                    response.raise_for_status() 
+                    # response.raise_for_status() 
                     res = response.text
-                    status_code = 400 if 'PDIExceptionMessage' in res else response.status_code
-                    sentry_message(f"Successfully pushed order to PDI: {item.get('order_id', 'unknown')}", task["name"], task["fetch_url"], task["push_url"])
+                    has_result_2 = '<Result>2</Result>' in res
+                    status_code = 400 if has_result_2 else response.status_code
+                    # status_code = 400 if 'PDIExceptionMessage' in res else response.status_code
+                    sentry_message(f"PDI Response check - Order: {item.get('order_id', 'unknown')}, Has Result=2: {has_result_2}, Status Code: {status_code}, HTTP Status: {response.status_code}", task["name"], task["fetch_url"], task["push_url"])
+                    if status_code != 400:
+                        sentry_message(f"Successfully pushed order to PDI: {item.get('order_id', 'unknown')}", task["name"], task["fetch_url"], task["push_url"])
                     log_end = datetime.datetime.now(datetime.UTC)
                     duration = (log_end - start_log).total_seconds()
                     external_integration_log(
@@ -490,26 +568,47 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                         status=status_code,
                         duration=duration,
                         direction="Outbound",
-                        event_name="AddFuelOrder"
+                        event_name=soap_action,
+                        model_type_id=2,
+                        model_record_id=item.get('order_id')
                     )
-                    if status_code != 400 and item.get('order_id'):
-                        headers = {
-                            "Content-Type": "application/xml",
-                            "Authorization": f"Token {AUTH_TOKEN}"
-                        }
-                        back_office_data = {
-                            "order_id": item.get('order_id'),
-                            'back_office_order_number':item.get('order_id')
-                        }
-                        response = await client.post(
-                            myfuel_base_url+ '/v1/order-backoffice-number-update/',
-                            data=json.dumps(back_office_data),
-                            headers=headers
-                        )
-                        response.raise_for_status()
+                    if status_code != 400 and soap_action == 'AddFuelOrder':
+                        order_no_match = re.search(r'&lt;OrderNo&gt;(.*?)&lt;/OrderNo&gt;', res, re.DOTALL)
+                        reference_no_match = re.search(r'&lt;ReferenceNo&gt;(.*?)&lt;/ReferenceNo&gt;', res, re.DOTALL)
+                        sentry_message(f"Extracting order numbers from PDI response for back-office update - OrderNo: {order_no_match.group(1).strip() if order_no_match else 'not found'}, ReferenceNo: {reference_no_match.group(1).strip() if reference_no_match else 'not found'}", task["name"], task["fetch_url"], task["push_url"])
+                        
+                        if order_no_match and reference_no_match:
+                            back_office_order_number = order_no_match.group(1).strip()
+                            order_id = reference_no_match.group(1).strip()
+                            
+                            headers = {
+                                "Content-Type": "application/json",
+                                "Authorization": f"Token {AUTH_TOKEN}"
+                            }
+                            back_office_data = {
+                                "order_id": order_id,
+                                'back_office_order_number': back_office_order_number
+                            }
+                            response = await client.post(
+                                myfuel_base_url+ '/v1/order-backoffice-number-update/',
+                                data=json.dumps(back_office_data),
+                                headers=headers
+                            )
+                            external_integration_log(
+                                request=json.dumps(back_office_data),
+                                response=response.text,
+                                status=response.status_code,
+                                duration=duration,
+                                direction="Outbound",
+                                event_name="AddFuelOrder",
+                                backoffice_integration_name='/v1/order-backoffice-number-update/',
+                                model_type_id=2,
+                                model_record_id=order_id
+                            )
                 except Exception as e:
                     loc = _exc_location(e)
                     logger.error(f"General error while pushing order to PDI: {e} (at {loc})")
+                    logger.error(f"PDI URL: {base_pdi_url}, Order ID: {item.get('order_id', 'unknown')}, SOAP Action: {soap_action}")
                     # raise RuntimeError(f"Failed to push data to PDI: {e} (at {loc})") from e
                     sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
                     log_end = datetime.datetime.now(datetime.UTC)
@@ -520,7 +619,9 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                         status=400,
                         duration=duration,
                         direction="Outbound",
-                        event_name="AddFuelOrder"
+                        event_name="AddFuelOrder",
+                        model_type_id=2,
+                        model_record_id=item.get('order_id')
                     )
         else:
             try:
@@ -603,6 +704,82 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                 direction="Outbound",
                 event_name=task["operation"]
             )
+            
+    elif task["push"] == "myfuel_json":
+        log_start = datetime.datetime.now(datetime.UTC)
+        # Nothing was fetched (source failed/empty) -> skip pushing this cycle.
+        if not data:
+            sentry_message(f"No data fetched for task {task['name']}, skipping push", task["name"], task["fetch_url"], task["push_url"])
+            return
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Token {AUTH_TOKEN}"
+            }
+            response = await client.post(
+                task["push_url"],
+                data=data,
+                headers=headers,
+                timeout=120.0  # Allow more time for MyFuel to process
+            )
+            response.raise_for_status()
+            sentry_message(f"Successfully pushed data to MyFuel for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
+            log_end = datetime.datetime.now(datetime.UTC)
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=data,
+                response=response.text,
+                status=response.status_code,
+                duration=duration,
+                direction="Outbound",
+                event_name=task["operation"]
+            )
+        except Exception as e:
+            loc = _exc_location(e)
+            logger.error(f"General error while pushing data to MyFuel (JSON): {e} (at {loc})")
+            sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+            log_end = datetime.datetime.now(datetime.UTC)
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=data,
+                response=str(e),
+                status=400,
+                duration=duration,
+                direction="Outbound",
+                event_name=task["operation"]
+            )
+# =========================
+# SERVICE STATUS UPDATE
+# =========================
+async def update_service_status():
+    """Update service status every 30 seconds"""
+    logger.info("Starting service status update loop")
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        while True:
+            try:
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Token {AUTH_TOKEN}"
+                }
+                status_data = {
+                    "integration_id": 1,
+                    "service_status": "active",
+                    "last_sync_on": datetime.datetime.now(datetime.UTC).isoformat()
+                }
+                response = await client.post(
+                    f"{myfuel_base_url}/v1/bosync-service-status/",
+                    json=status_data,
+                    headers=headers
+                )
+                response.raise_for_status()
+                logger.info(f"Service status updated successfully: {status_data['last_sync_on']}")
+            except Exception as e:
+                loc = _exc_location(e)
+                logger.error(f"Error updating service status: {e} (at {loc})")
+            
+            # Wait 30 seconds before next update
+            await asyncio.sleep(30)
+
 # =========================
 # POLL LOOP PER TASK
 # =========================
@@ -638,17 +815,27 @@ async def sap_event(request: Request):
 # APP LIFECYCLE
 # =========================
 _poll_tasks: list[asyncio.Task] = []
+_status_task: asyncio.Task = None
 
 @app.on_event("startup")
 async def startup():
+    global _status_task
+    # Start service status update task
+    _status_task = asyncio.create_task(update_service_status())
+    # Start poll tasks for each configured task
     for task in TASK_CONFIGS:
         _poll_tasks.append(asyncio.create_task(poll_task(task)))
 
 @app.on_event("shutdown")
 async def shutdown():
+    # Cancel all tasks
+    if _status_task:
+        _status_task.cancel()
     for task in _poll_tasks:
         task.cancel()
-    await asyncio.gather(*_poll_tasks, return_exceptions=True)
+    # Wait for all tasks to complete
+    all_tasks = [_status_task] + _poll_tasks if _status_task else _poll_tasks
+    await asyncio.gather(*all_tasks, return_exceptions=True)
 
 # =========================
 # ENTRY POINT
@@ -657,6 +844,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8003,
+        port=8004,
         log_level="info"
     )
