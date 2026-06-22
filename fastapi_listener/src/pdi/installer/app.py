@@ -60,7 +60,8 @@ myfuel_base_url = SECURE_ENV.get(
     "MYFUEL_BASE_URL",
     "https://jrp-jupiter-api.myfuel.ai"
 )
-# myfuel_base_url = "http://localhost:8000" 
+# myfuel_base_url = "http://localhost:8000"
+smarttank_base_url = "http://172.30.10.142/api/myfuel"
 
 
 handler = RotatingFileHandler(
@@ -221,7 +222,7 @@ TASK_CONFIGS = [
     {
         "name": "smarttank_inventory_sync",
         # SOURCE we pull current inventories from (Smart Tank system).
-        "fetch_url": "http://172.30.10.142/api/myfuel/get-current-inventories",
+        "fetch_url": smarttank_base_url + "/get-current-inventories",
         # DESTINATION we push the inventories to (MyFuel).
         "push_url": myfuel_base_url + "/v1/asset-tank/smarttank-inventory-sync/",
         "operation": "GetCurrentInventories",
@@ -234,6 +235,30 @@ TASK_CONFIGS = [
         },
         "push": "myfuel_json",
         "pull": "smarttank"
+    },
+    {
+        "name": "smarttank_carrier_sync",
+        "fetch_url": smarttank_base_url + "/master-data/carrier",
+        "push_url": myfuel_base_url + "/v1/pdi-carrier-sync/",
+        "operation": "GetCarrierData",
+        "poll_interval": 1800,
+        "headers": {
+            "apiKey": "iQSV9kwqaJdCNmhlBPejm0na2nZdOqg9"
+        },
+        "push": "myfuel_json",
+        "pull": "smarttank_get"
+    },
+    {
+        "name": "smarttank_salesperson_sync",
+        "fetch_url": smarttank_base_url + "/master-data/salesperson-assignments",
+        "push_url": myfuel_base_url + "/v1/pdi-customer-salesperson/",
+        "operation": "GetSalespersonAssignments",
+        "poll_interval": 900,
+        "headers": {
+            "apiKey": "iQSV9kwqaJdCNmhlBPejm0na2nZdOqg9"
+        },
+        "push": "myfuel_json",
+        "pull": "smarttank_get"
     },
     # {
     #     "name": "get_fuel_loads",
@@ -525,10 +550,128 @@ async def fetch_data(task: dict, client: httpx.AsyncClient) -> str:
             )
             return ""  # Return empty string on failure to allow retrying in next poll
 
+    elif task["pull"] == "smarttank_get":
+        headers = task.get("headers", {})
+        try:
+            response = await client.get(
+                task["fetch_url"],
+                headers=headers,
+                timeout=60.0
+            )
+            response.raise_for_status()
+            res = response.text
+            status_code = response.status_code
+            sentry_message(f"Successfully fetched data from SmartTank for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
+            log_end = datetime.datetime.now(datetime.UTC)
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=json.dumps(headers),
+                response=res,
+                status=status_code,
+                duration=duration,
+                direction="Inbound",
+                event_name=task["operation"]
+            )
+            return res
+        except Exception as e:
+            loc = _exc_location(e)
+            logger.error(f"General error while fetching data from SmartTank: {e} (at {loc})")
+            sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
+            log_end = datetime.datetime.now(datetime.UTC)
+            duration = (log_end - log_start).total_seconds()
+            external_integration_log(
+                request=json.dumps(headers),
+                response=str(e),
+                status=400,
+                duration=duration,
+                direction="Inbound",
+                event_name=task["operation"]
+            )
+            return ""  # Return empty string on failure to allow retrying in next poll
+
 
 # =========================
 # PUSH DATA
 # =========================
+_BACKOFFICE_ENDPOINTS = {
+    'AddFuelOrder':    '/v1/order-backoffice-number-update/',
+    'UpdateFuelOrder': '/v1/update-pdi-backoffice-status/',
+}
+
+async def _notify_myfuel_backoffice(
+    client: httpx.AsyncClient,
+    res: str,
+    soap_action: str,
+    duration: float,
+    task: dict,
+):
+    endpoint = _BACKOFFICE_ENDPOINTS.get(soap_action)
+    if not endpoint:
+        return
+
+    order_no_match = re.search(r'&lt;OrderNo&gt;(.*?)&lt;/OrderNo&gt;', res, re.DOTALL)
+    reference_no_match = re.search(r'&lt;ReferenceNo&gt;(.*?)&lt;/ReferenceNo&gt;', res, re.DOTALL)
+    sentry_message(
+        f"Extracting order numbers from PDI response for {endpoint} - "
+        f"OrderNo: {order_no_match.group(1).strip() if order_no_match else 'not found'}, "
+        f"ReferenceNo: {reference_no_match.group(1).strip() if reference_no_match else 'not found'}",
+        task["name"], task["fetch_url"], task["push_url"]
+    )
+
+    if not (order_no_match and reference_no_match):
+        return
+
+    back_office_order_number = order_no_match.group(1).strip()
+    order_id = reference_no_match.group(1).strip()
+
+    if soap_action == 'UpdateFuelOrder':
+        headers = {
+            "Content-Type": "text/xml; charset=utf-8",
+            "Authorization": f"Token {AUTH_TOKEN}",
+        }
+        response = await client.post(
+            myfuel_base_url + endpoint,
+            data=res,
+            headers=headers,
+        )
+        external_integration_log(
+            request=res,
+            response=response.text,
+            status=response.status_code,
+            duration=duration,
+            direction="Outbound",
+            event_name=soap_action,
+            backoffice_integration_name=endpoint,
+            model_type_id=2,
+            model_record_id=order_id,
+        )
+    else:
+        back_office_data = {
+            "order_id": order_id,
+            "back_office_order_number": back_office_order_number,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Token {AUTH_TOKEN}",
+        }
+        response = await client.post(
+            myfuel_base_url + endpoint,
+            data=json.dumps(back_office_data),
+            headers=headers,
+        )
+        external_integration_log(
+            request=json.dumps(back_office_data),
+            response=response.text,
+            status=response.status_code,
+            duration=duration,
+            direction="Outbound",
+            event_name=soap_action,
+            backoffice_integration_name=endpoint,
+            model_type_id=2,
+            model_record_id=order_id,
+        )
+
+
 async def push_data(task: dict, data: str, client: httpx.AsyncClient):
     start_log = datetime.datetime.now(datetime.UTC)
     sentry_message(f"Pushing data for task {task['name']}", task["name"], task["fetch_url"], task["push_url"])
@@ -548,9 +691,10 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                         "SOAPAction": f'http://profdata.com.Petronet/{soap_action}'
                     }
                     response = await client.post(
-                        url= base_pdi_url,
+                        url=base_pdi_url,
                         data=order_xml,
-                        headers=headers
+                        headers=headers,
+                        timeout=60.0
                     )
                     # response.raise_for_status() 
                     res = response.text
@@ -572,42 +716,13 @@ async def push_data(task: dict, data: str, client: httpx.AsyncClient):
                         model_type_id=2,
                         model_record_id=item.get('order_id')
                     )
-                    if status_code != 400 and soap_action == 'AddFuelOrder':
-                        order_no_match = re.search(r'&lt;OrderNo&gt;(.*?)&lt;/OrderNo&gt;', res, re.DOTALL)
-                        reference_no_match = re.search(r'&lt;ReferenceNo&gt;(.*?)&lt;/ReferenceNo&gt;', res, re.DOTALL)
-                        sentry_message(f"Extracting order numbers from PDI response for back-office update - OrderNo: {order_no_match.group(1).strip() if order_no_match else 'not found'}, ReferenceNo: {reference_no_match.group(1).strip() if reference_no_match else 'not found'}", task["name"], task["fetch_url"], task["push_url"])
-                        
-                        if order_no_match and reference_no_match:
-                            back_office_order_number = order_no_match.group(1).strip()
-                            order_id = reference_no_match.group(1).strip()
-                            
-                            headers = {
-                                "Content-Type": "application/json",
-                                "Authorization": f"Token {AUTH_TOKEN}"
-                            }
-                            back_office_data = {
-                                "order_id": order_id,
-                                'back_office_order_number': back_office_order_number
-                            }
-                            response = await client.post(
-                                myfuel_base_url+ '/v1/order-backoffice-number-update/',
-                                data=json.dumps(back_office_data),
-                                headers=headers
-                            )
-                            external_integration_log(
-                                request=json.dumps(back_office_data),
-                                response=response.text,
-                                status=response.status_code,
-                                duration=duration,
-                                direction="Outbound",
-                                event_name="AddFuelOrder",
-                                backoffice_integration_name='/v1/order-backoffice-number-update/',
-                                model_type_id=2,
-                                model_record_id=order_id
-                            )
+                    if status_code != 400 and soap_action in _BACKOFFICE_ENDPOINTS:
+                        await _notify_myfuel_backoffice(
+                            client, res, soap_action, duration, task
+                        )
                 except Exception as e:
                     loc = _exc_location(e)
-                    logger.error(f"General error while pushing order to PDI: {e} (at {loc})")
+                    logger.error(f"General error while pushing order to PDI: {type(e).__name__}: {e!r} (at {loc})")
                     logger.error(f"PDI URL: {base_pdi_url}, Order ID: {item.get('order_id', 'unknown')}, SOAP Action: {soap_action}")
                     # raise RuntimeError(f"Failed to push data to PDI: {e} (at {loc})") from e
                     sentry_exception_handler(e, task["name"], task["fetch_url"], task["push_url"])
