@@ -1,0 +1,8 @@
+{
+  "myfuel_base_url": "https://<site>-api.myfuel.ai",
+  "quickbooks": {
+    "app_id": "",
+    "app_name": "MyFuel QuickBooks Service",
+    "interval_seconds": 60
+  }
+}
