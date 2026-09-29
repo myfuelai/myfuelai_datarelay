@@ -1,5 +1,15 @@
-# Ignore installer build/dist directories anywhere in the repo
-**/installer/dist/**
-**/installer/build/**
-# Ignore .spec files in installer directories (including subdirs)
-**/installer/**/*.spec
+# Build output (build.ps1 / PyInstaller)
+/build/
+/dist/
+/.build-venv/
+
+# Secrets and per-site runtime files - never commit
+.env
+secrets.json
+/logs/
+/config/relay.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
